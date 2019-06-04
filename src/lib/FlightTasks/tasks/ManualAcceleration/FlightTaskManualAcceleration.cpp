@@ -77,10 +77,6 @@ bool FlightTaskManualAcceleration::update()
 
 	// Map sticks input to acceleration
 	_acceleration_setpoint = Vector3f(&_sticks_expo(0)) * 10;
-	_velocity_setpoint = Vector3f();
-
-	printf("ACC IN TASK:\n");
-	_acceleration_setpoint.print();
 
 	// Rotate horizontal acceleration input to body heading
 	float yaw_rotate = PX4_ISFINITE(_yaw_setpoint) ? _yaw_setpoint : _yaw;
@@ -88,6 +84,11 @@ bool FlightTaskManualAcceleration::update()
 				_acceleration_setpoint(1), 0.0f));
 	_acceleration_setpoint(0) = v_r(0);
 	_acceleration_setpoint(1) = v_r(1);
+
+	_acceleration_setpoint -= 2.f * _velocity;
+
+	// printf("ACC TASK:\n");
+	// _acceleration_setpoint.print();
 
 	_constraints.want_takeoff = _checkTakeoff();
 	return true;

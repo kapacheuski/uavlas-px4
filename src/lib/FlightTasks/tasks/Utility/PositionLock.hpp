@@ -59,10 +59,10 @@ public:
 	 * @return yaw setpoint to execute to have a yaw lock at the correct moment in time
 	 */
 	void updateYawFromStick(float &yawspeed_setpoint, float &yaw_setpoint, const float desired_yawspeed, const float yaw,
-				const float dt)
+				const float deltatime)
 	{
-		_yawspeed_slew_rate.setSlewRate(1.f);
-		yawspeed_setpoint = _yawspeed_slew_rate.update(desired_yawspeed, dt);
+		_yawspeed_slew_rate.setSlewRate(2.f * M_PI_F);
+		yawspeed_setpoint = _yawspeed_slew_rate.update(desired_yawspeed, deltatime);
 		yaw_setpoint = updateYawLock(yaw, yawspeed_setpoint, yaw_setpoint);
 	}
 

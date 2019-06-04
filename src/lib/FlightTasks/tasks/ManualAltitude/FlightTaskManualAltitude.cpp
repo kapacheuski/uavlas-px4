@@ -318,6 +318,8 @@ void FlightTaskManualAltitude::_updateSetpoints()
 	_thrust_setpoint(0) = sp(0);
 	_thrust_setpoint(1) = sp(1);
 	_thrust_setpoint(2) = NAN;
+	_acceleration_setpoint(0) = 10.f * sp(0);
+	_acceleration_setpoint(1) = 10.f * sp(1);
 
 	_updateAltitudeLock();
 	_respectGroundSlowdown();
