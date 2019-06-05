@@ -318,6 +318,44 @@ void PositionControl::_velocityController(const float &dt)
 				       + _thr_int(0) + thr_ff(0);
 		thrust_desired_NE(1) = _param_mpc_xy_vel_p.get() * vel_err(1) + _param_mpc_xy_vel_d.get() * _vel_dot(1)
 				       + _thr_int(1) + thr_ff(1);
+		static bool autotune = true;
+		if (autotune) {
+			static int convergence_counter = 0;
+			const float amplitude_max = 0.2f;
+			static float kp = 1.5;
+			float error = vel_err(0) * kp;
+			float vel_err_sat = error;
+
+			// Saturation block
+			if (error > amplitude_max) {
+				vel_err_sat = 0.2f;
+
+			} else if (error < -amplitude_max) {
+				vel_err_sat = -0.2f;
+			}
+
+			thrust_desired_NE(0) = vel_err_sat;
+			thrust_desired_NE(1) = 0.f;
+
+			if (convergence_counter < 500) {
+				// epsilon << a
+				const float epsilon = 0.0001f;
+				const float a = 0.05f;
+				float kp_dot = -a * fabsf(error - vel_err_sat) + epsilon;
+				printf("kp = %.3f\n, kp_dot = %.3f\n", (double)kp, (double)kp_dot);
+				kp += kp_dot;
+				if (fabs(kp_dot) < 0.002f && kp < 1.4f) {
+					convergence_counter++;
+
+				} else {
+					convergence_counter = 0;
+				}
+
+			} else {
+				// Ultimate gain found, start counting periods
+				autotune = false;
+			}
+		}
 
 		// Get maximum allowed thrust in NE based on tilt and excess thrust.
 		float thrust_max_NE_tilt = fabsf(_thr_sp(2)) * tanf(_constraints.tilt);
