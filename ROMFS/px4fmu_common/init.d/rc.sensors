@@ -105,6 +105,10 @@ then
 	teraranger start -a
 fi
 
+# UAVLAS sernor start permanently
+# TODO: create param for uavlas device
+uavlas start
+
 ###############################################################################
 #                            End Optional drivers                             #
 ###############################################################################

@@ -50,6 +50,7 @@
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/sensor_bias.h>
 #include <uORB/topics/irlock_report.h>
+#include <uORB/topics/uavlas_report.h>
 #include <uORB/topics/landing_target_pose.h>
 #include <uORB/topics/landing_target_innovations.h>
 #include <uORB/topics/parameter_update.h>
@@ -73,6 +74,8 @@ public:
 	 * Get new measurements and update the state estimate
 	 */
 	void update();
+    void update_irlock();
+    void update_uavlas();
 
 protected:
 	/*
@@ -142,17 +145,22 @@ private:
 	int _attitudeSub;
 	int _sensorBiasSub;
 	int _irlockReportSub;
+    int _uavlasReportSub;
+
 
 	struct vehicle_local_position_s	_vehicleLocalPosition;
 	struct vehicle_attitude_s	_vehicleAttitude;
 	struct sensor_bias_s		_sensorBias;
 	struct irlock_report_s		_irlockReport;
+    struct uavlas_report_s		_uavlasReport;
+
 
 	// keep track of which topics we have received
 	bool _vehicleLocalPosition_valid;
 	bool _vehicleAttitude_valid;
 	bool _sensorBias_valid;
 	bool _new_irlockReport;
+    bool _new_uavlasReport;
 	bool _estimator_initialized;
 	// keep track of whether last measurement was rejected
 	bool _faulty;

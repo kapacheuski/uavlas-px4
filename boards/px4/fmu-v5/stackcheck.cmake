@@ -60,6 +60,7 @@ px4_add_board(
 		test_ppm
 		tone_alarm
 		#uavcan
+		#uavlas
 
 	MODULES
 		attitude_estimator_q
