@@ -81,8 +81,7 @@ LandingTargetEstimator::LandingTargetEstimator() :
 
 void LandingTargetEstimator::update()
 {
-	_check_params(false);
-
+    _check_params(false);
 	_update_topics();
 
 	/* predict */
@@ -261,7 +260,7 @@ void LandingTargetEstimator::update_uavlas()
     // mark this sensor measurement as consumed
     _new_uavlasReport = false;
 
-    if (!_vehicleAttitude_valid || !_vehicleLocalPosition_valid || !_vehicleLocalPosition.dist_bottom_valid) {
+    if (!_vehicleAttitude_valid || !_vehicleLocalPosition_valid /*|| !_vehicleLocalPosition.dist_bottom_valid*/) {
         // don't have the data needed for an update
         return;
     }
@@ -350,7 +349,7 @@ void LandingTargetEstimator::update_uavlas()
 
             } else {
                 orb_publish(ORB_ID(landing_target_pose), _targetPosePub, &_target_pose);
-                PX4_INFO("LTPub:X=%3.2f,Y=%3.2f,DIST=%3.2f,CX=%3.2f,CY=%3.2f,Vx=%3.2f,Vy=%3.2f",
+                PX4_WARN("LTPub:X=%3.2f,Y=%3.2f,DIST=%3.2f,CX=%3.2f,CY=%3.2f,Vx=%3.2f,Vy=%3.2f",
                          (double)x,(double)y,(double)dist,(double)covx,(double)covy,(double)xvel,(double)yvel);
             }
 

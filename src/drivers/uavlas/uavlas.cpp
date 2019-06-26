@@ -370,8 +370,8 @@ int UAVLAS::read_device_block(struct uavlas_target_s *block)
     int status = transfer(nullptr, 0, &bytes[0], sizeof bytes);
     uint16_t id     = bytes[1] << 8 | bytes[0];
     uint16_t stat   = bytes[3] << 8 | bytes[2];
-    int16_t  pos_x  = bytes[5] << 8 | bytes[4];
-    int16_t  pos_y  = bytes[7] << 8 | bytes[6];
+    int16_t  pos_y  = bytes[5] << 8 | bytes[4];
+    int16_t  pos_x  = bytes[7] << 8 | bytes[6];
     uint16_t pos_z  = bytes[9] << 8 | bytes[8];
     uint8_t  snr    = bytes[10];
     uint8_t  cl     = bytes[11];
