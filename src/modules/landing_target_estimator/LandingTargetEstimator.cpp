@@ -276,8 +276,8 @@ void LandingTargetEstimator::update_uavlas()
 
 
     // Work in NED no rotation required
-    _rel_pos(0) = _uavlasReport.pos_x;
-    _rel_pos(1) = _uavlasReport.pos_y;
+    _rel_pos(0) = _uavlasReport.pos_x * _params.scale_x;
+    _rel_pos(1) = _uavlasReport.pos_y * _params.scale_y;
     float dist  = _uavlasReport.pos_z;//_vehicleLocalPosition.dist_bottom;
 
     if (!_estimator_initialized) {
@@ -349,8 +349,8 @@ void LandingTargetEstimator::update_uavlas()
 
             } else {
                 orb_publish(ORB_ID(landing_target_pose), _targetPosePub, &_target_pose);
-                PX4_WARN("LTPub:X=%3.2f,Y=%3.2f,DIST=%3.2f,CX=%3.2f,CY=%3.2f,Vx=%3.2f,Vy=%3.2f",
-                         (double)x,(double)y,(double)dist,(double)covx,(double)covy,(double)xvel,(double)yvel);
+              //  PX4_WARN("LTPub:X=%3.2f,Y=%3.2f,DIST=%3.2f,CX=%3.2f,CY=%3.2f,Vx=%3.2f,Vy=%3.2f",
+              //           (double)x,(double)y,(double)dist,(double)covx,(double)covy,(double)xvel,(double)yvel);
             }
 
             _last_update = hrt_absolute_time();
