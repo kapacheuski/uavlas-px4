@@ -98,8 +98,12 @@ struct uavlas_target_s {
     uint16_t status; /** target status **/
 
     int16_t  pos_x;  /** x-axis distance (NE) from beacon **/
-    int16_t  pos_y;	/** y-axis distance (NE) from beacon **/
-    uint16_t pos_z;	/** z-axis distance (Altitude) from beacon **/
+    int16_t  pos_y;	 /** y-axis distance (NE) from beacon **/
+    uint16_t pos_z;	 /** z-axis distance (Altitude) from beacon **/
+    int16_t  vel_x;  /** x-axis velocity (NE) from beacon **/
+    int16_t  vel_y;	 /** y-axis velocity (NE) from beacon **/
+
+
     uint8_t  snr;    /** Signal to noise ratio in db **/
     uint8_t  cl;     /** Commin lighting level in db **/
 
@@ -244,15 +248,16 @@ int UAVLAS::test(uint16_t secs)
 
     while ((hrt_absolute_time() - start_time) < (1000000*secs)) {
         if (_reports->get(&report)) {
-            warnx("id:%u status:%u x:%d y:%d z:%u snr:%u cl:%u",
+            warnx("id:%u status:%u x:%d y:%d z:%u vx:%d vy:%d snr:%u cl:%u",
                   report.id,
                   report.status,
                   report.pos_x,
                   report.pos_y,
                   report.pos_z,
+                  report.vel_x,
+                  report.vel_y,
                   report.snr,
                   report.cl);
-
 
         }
         /** sleep for 0.1 seconds **/
@@ -334,6 +339,9 @@ int UAVLAS::read_device()
     orb_report.pos_x     = (float32)report.pos_x/100.0f;
     orb_report.pos_y     = (float32)report.pos_y/100.0f;
     orb_report.pos_z     = (float32)report.pos_z/100.0f;
+    orb_report.vel_x     = (float32)report.vel_x/100.0f;
+    orb_report.vel_y     = (float32)report.vel_y/100.0f;
+
 
     if (_uavlas_report_topic != nullptr) {
         orb_publish(ORB_ID(uavlas_report), _uavlas_report_topic, &orb_report);
@@ -364,7 +372,7 @@ int UAVLAS::read_device_word(uint16_t *word)
 
 int UAVLAS::read_device_block(struct uavlas_target_s *block)
 {
-    uint8_t bytes[13];
+    uint8_t bytes[17];
     memset(bytes, 0, sizeof bytes);
 
     int status = transfer(nullptr, 0, &bytes[0], sizeof bytes);
@@ -372,10 +380,12 @@ int UAVLAS::read_device_block(struct uavlas_target_s *block)
     uint16_t stat   = bytes[3] << 8 | bytes[2];
     int16_t  pos_y  = bytes[5] << 8 | bytes[4];
     int16_t  pos_x  = bytes[7] << 8 | bytes[6];
-    uint16_t pos_z  = bytes[9] << 8 | bytes[8];
-    uint8_t  snr    = bytes[10];
-    uint8_t  cl     = bytes[11];
-    uint8_t  crc    = bytes[12];
+    int16_t  pos_z  = bytes[9] << 8 | bytes[8];
+    int16_t  vel_y  = bytes[11] << 8 | bytes[10];
+    int16_t  vel_x  = bytes[13] << 8 | bytes[12];
+    uint8_t  snr    = bytes[14];
+    uint8_t  cl     = bytes[15];
+    uint8_t  crc    = bytes[16];
 
     uint8_t tcrc = 0;
     for (uint i=0; i<sizeof(bytes)-1; i++) {
@@ -394,6 +404,8 @@ int UAVLAS::read_device_block(struct uavlas_target_s *block)
     block->pos_x = pos_x;
     block->pos_y = pos_y;
     block->pos_z = pos_z;
+    block->vel_x = vel_x;
+    block->vel_y = vel_y;
     block->snr   = snr;
     block->cl    = cl;
 
