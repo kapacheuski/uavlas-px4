@@ -322,11 +322,11 @@ void LandingTargetEstimator::update_uavlas()
 
             _target_pose.rel_pos_valid = true;
             _target_pose.rel_vel_valid = true;
-            _target_pose.x_rel = x;
-            _target_pose.y_rel = y;
+            _target_pose.x_rel = _uavlasReport.pos_x;//x;
+            _target_pose.y_rel = _uavlasReport.pos_y;//y;
             _target_pose.z_rel = dist;
-            _target_pose.vx_rel = xvel;
-            _target_pose.vy_rel = yvel;
+            _target_pose.vx_rel = _uavlasReport.vel_x;//xvel;
+            _target_pose.vy_rel = _uavlasReport.vel_y;//yvel;
 
             _target_pose.cov_x_rel = covx;
             _target_pose.cov_y_rel = covy;
