@@ -27,8 +27,3 @@ fw_pos_control_l1 start
 # Multicopter for now until we have something for VTOL
 #
 land_detector start vtol
-
-#
-# Start Multicopter Landing Target Estimator.
-#
-landing_target_estimator start

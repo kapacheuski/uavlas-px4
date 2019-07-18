@@ -54,8 +54,3 @@ mc_pos_control start
 # Start Multicopter Land Detector.
 #
 land_detector start multicopter
-
-#
-# Start Multicopter Landing Target Estimator.
-#
-landing_target_estimator start
