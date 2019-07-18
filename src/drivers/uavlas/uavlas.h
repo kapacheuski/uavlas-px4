@@ -66,10 +66,12 @@
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/parameter_update.h>
 
+
+namespace uavlas{
 // Defines section
 #define UAVLAS_I2C_BUS			PX4_I2C_BUS_EXPANSION
 #define UAVLAS_I2C_ADDRESS		0x55 /** 7-bit address (non shifted) **/
-#define UAVLAS_CONVERSION_INTERVAL_US	100000U /** us = 100ms = 10Hz **/
+#define UAVLAS_UPDATE_RATE   	10U /** 10Hz **/
 
 #ifndef CONFIG_SCHED_WORKQUEUE
 # error This requires CONFIG_SCHED_WORKQUEUE.
@@ -112,7 +114,6 @@ const int busses_to_try[] = {
 //    uint8_t  cl;     /** Commin lighting level in db **/
 //}__attribute__((packed));
 
-
 // Device class
 class UAVLAS : public device::I2C {
 public:
@@ -124,17 +125,18 @@ public:
     virtual int info();
     virtual int test(uint16_t secs);
 
-    virtual ssize_t read(struct file *filp, char *buffer, size_t buflen);
+   // virtual ssize_t read(struct file *filp, char *buffer, size_t buflen);
 
+    void		update();
+    void		status();
 private:
     // Device Control Functions
-    void 		start();
-    void 		stop();
-    static void	cycle_trampoline(void *arg);
-    void		cycle();
+    //void 		start();
+    //void 		stop();
+
 
     int 		read_device();
- //   int 		read_device_word(uint16_t *word);
+    int 		read_device_word(uint16_t *word);
     int 		read_device_block(struct uavlas_report_s *block);
 
     void check_params(const bool force);
@@ -186,7 +188,5 @@ private:
     work_s _work;
 };
 
-namespace {
-UAVLAS *g_uavlas = nullptr;
 }
 

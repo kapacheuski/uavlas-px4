@@ -41,49 +41,110 @@
  **/
 
 #include "uavlas.h"
+
+#define STATUS_UPDATE_RATE 2 /*status update freq */
+
+namespace uavlas {
 // Global functions
 void uavlas_usage();
-bool check_device(int bus);
+UAVLAS * create_device(int bus);
+UAVLAS *g_uavlas = nullptr;
+static bool thread_should_exit = false;	/**< daemon exit flag */
+static bool thread_running = false;		/**< daemon status flag */
+static int daemon_task;			/**< Handle of daemon task / thread */
+static int statusDisplayTime = 0;
+static bool infoDisplay = false;
 
 extern "C" __EXPORT int uavlas_main(int argc, char *argv[]);
 
-void uavlas_usage()
-{
-    warnx("missing command: try 'start', 'stop', 'info', 'test'");
-    warnx("options:");
-    warnx("    -b i2cbus");
-    warnx("    -t test time (sec)");
 
-}
-bool check_device(int bus)
+
+
+
+UAVLAS *create_device(int bus)
 {
     /* create the driver */
     /* UAVLAS("trying bus %d", *cur_bus); */
-    g_uavlas = new UAVLAS(bus, UAVLAS_I2C_ADDRESS);
+    UAVLAS *u = new UAVLAS(bus, UAVLAS_I2C_ADDRESS);
 
-    if (g_uavlas == nullptr) {
+    if (u == nullptr) {
         /* this is a fatal error */
-        warnx("failed to allocated memory for driver");
-
+        PX4_WARN("failed to allocated memory for driver");
     }
-    else if (OK == g_uavlas->init()) {
+    else if (OK == u->init()) {
         /* success! */
-        return true;
+        return u;
     }
     else {
-       /* warnx("failed to initialize device, on bus %d",bus);*/
+       // PX4_WARN("failed to initialize device, on bus %d",bus);
     }
 
     /* destroy it again because it failed. */
-    UAVLAS *tmp_uavlas = g_uavlas;
-    g_uavlas = nullptr;
+    UAVLAS *tmp_uavlas = u;
+    u = nullptr;
     delete tmp_uavlas;
-    return false;
+    return nullptr;
+}
+
+int uavlas_thread(int argc, char *argv[])
+{
+
+    UAVLAS *uavlas;
+
+    thread_running = true;
+    thread_should_exit = true;
+
+    const int *cur_bus = busses_to_try;
+    while (*cur_bus != -1) {
+        uavlas = create_device(*cur_bus);
+        if (uavlas != nullptr) {
+            PX4_INFO("Started on bus#:%d",*cur_bus);
+            thread_should_exit = false;
+            break;
+        }
+        /* try next! */
+        cur_bus++;
+    }
+
+    int statusUpdateTime = 0;
+    while (!thread_should_exit) {
+        uavlas->update();
+        if (statusDisplayTime && (++statusUpdateTime >= (10/STATUS_UPDATE_RATE))) {
+            statusDisplayTime--;
+            statusUpdateTime = 0;
+            uavlas->status();
+        }
+        if (infoDisplay) {
+            infoDisplay = false;
+            uavlas->info();
+        }
+
+        px4_usleep(1000000 / UAVLAS_UPDATE_RATE);
+    }
+
+    if (uavlas != nullptr) {
+
+        delete uavlas;
+    }
+
+    PX4_INFO("Exiting");
+
+    thread_running = false;
+
+    return 0;
+
+
+}
+void uavlas_usage()
+{
+    PX4_INFO("missing command: try 'start', 'stop', 'info', 'status'");
+    PX4_INFO("options:");
+    PX4_INFO("    -t status display time time (sec)");
 }
 
 int uavlas_main(int argc, char *argv[])
 {
-    int i2cdevice = -1;// UAVLAS_I2C_BUS;
+
     int secs = 10;
     int ch;
     int myoptind = 1;
@@ -91,13 +152,9 @@ int uavlas_main(int argc, char *argv[])
 
     while ((ch = px4_getopt(argc, argv, "b:t:", &myoptind, &myoptarg)) != EOF) {
         switch (ch) {
-        case 'b':
-            i2cdevice = (uint8_t)atoi(myoptarg);
-            break;
         case 't':
             secs = (uint8_t)atoi(myoptarg);
             break;
-
         default:
             PX4_WARN("Unknown option!");
             return -1;
@@ -113,63 +170,40 @@ int uavlas_main(int argc, char *argv[])
 
     /** start driver **/
     if (!strcmp(command, "start")) {
-        if (g_uavlas != nullptr) {
-            errx(1, "driver has already been started");
+        if (thread_running) {
+            PX4_INFO("already running");
+            /* this is not an error */
+            return true;
         }
-
-        if (i2cdevice == -1) {
-            const int *cur_bus = busses_to_try;
-            while (*cur_bus != -1) {
-                /* create the driver */
-                /* UAVLAS("trying bus %d", *cur_bus); */
-                if (check_device(*cur_bus)) {
-                    i2cdevice = *cur_bus;
-                    break;
-                }
-                /* try next! */
-                cur_bus++;
-            }
-        }
-        else if (!check_device(i2cdevice)) {
-            i2cdevice = -1;
-        }
-
-        if (i2cdevice == -1) {
-            errx(1, "unable to find device");
-        }
-        PX4_INFO("Started on bus#:%d",i2cdevice);
-        exit(0);
+        thread_should_exit = false;
+        daemon_task = px4_task_spawn_cmd("uavlas",
+                                         SCHED_DEFAULT,
+                                         SCHED_PRIORITY_DEFAULT,
+                                         2000,
+                                         uavlas_thread,
+                                         (argv) ? (char *const *)&argv[2] : nullptr);
+     exit(OK);
     }
-
-    /** need the driver past this point **/
-    if (g_uavlas == nullptr) {
-        warnx("not started");
-        uavlas_usage();
-        exit(1);
-    }
-
     /** stop the driver **/
     if (!strcmp(command, "stop")) {
-        UAVLAS *tmp_uavlas = g_uavlas;
-        g_uavlas = nullptr;
-        delete tmp_uavlas;
-        warnx("uavlas stopped");
+        if (!thread_running) {
+            PX4_WARN("landing_target_estimator not running");
+        }
+        thread_should_exit = true;
         exit(OK);
     }
-
     /** Print driver information **/
     if (!strcmp(command, "info")) {
-        g_uavlas->info();
+        infoDisplay = true;
         exit(OK);
     }
-
     /** test driver **/
-    if (!strcmp(command, "test")) {
-        g_uavlas->test(secs);
+    if (!strcmp(command, "status")) {
+        statusDisplayTime = secs * STATUS_UPDATE_RATE;
         exit(OK);
     }
-
     /** display usage info **/
     uavlas_usage();
     exit(0);
+}
 }

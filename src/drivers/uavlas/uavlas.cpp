@@ -41,7 +41,7 @@
  **/
 
 #include "uavlas.h"
-
+namespace uavlas{
 UAVLAS::UAVLAS(int bus, int address) :
     I2C("uavlas", UAVLAS0_DEVICE_PATH, bus, address, 400000),
     _vehicleLocalPosition_valid(false),
@@ -64,7 +64,7 @@ UAVLAS::UAVLAS(int bus, int address) :
 
 UAVLAS::~UAVLAS()
 {
-    stop();
+    //stop();
     if (_reports != nullptr) {
         delete _reports;
     }
@@ -87,7 +87,7 @@ int UAVLAS::init()
     }
     else {
         _sensor_ok = true;
-        start();
+        //start();
         return OK;
     }
 }
@@ -110,114 +110,110 @@ int UAVLAS::probe()
 /** get device status information **/
 int UAVLAS::info()
 {
-    if (g_uavlas == nullptr) {
-        errx(1, "uavlas device driver is not running");
-    }
+
     /** display reports in queue **/
     if (_sensor_ok) {
         _reports->print_info("report queue: ");
-        warnx("read errors:%lu", (unsigned long)_read_failures);
+        PX4_WARN("read errors:%lu", (unsigned long)_read_failures);
 
     }
     else {
-        warnx("sensor is not healthy");
+        PX4_WARN("sensor is not healthy");
     }
 
     return OK;
 }
-/** device test **/
+///** device test **/
 int UAVLAS::test(uint16_t secs)
 {
-    if (g_uavlas == nullptr) {
-        errx(1, "uavlas device driver is not running");
-    }
     if (!_sensor_ok) {
         errx(1, "sensor not ready");
     }
+//    warnx("Display sensor data %u sec.",secs);
 
-    warnx("Display sensor data %u sec.",secs);
+//    struct uavlas_report_s report;
+//    uint64_t start_time = hrt_absolute_time();
 
-    struct uavlas_report_s report;
-    uint64_t start_time = hrt_absolute_time();
+//    while ((hrt_absolute_time() - start_time) < (1000000*secs)) {
+//        if (_reports->get(&report)) {
+//            warnx("id:%u status:%u x:%f y:%f z:%f vx:%f vy:%f snr:%f cl:%f",
+//                  report.id,
+//                  report.status,
+//                  (double)report.pos_x,
+//                  (double)report.pos_y,
+//                  (double)report.pos_z,
+//                  (double)report.vel_x,
+//                  (double)report.vel_y,
+//                  (double)report.snr,
+//                  (double)report.cl);
 
-    while ((hrt_absolute_time() - start_time) < (1000000*secs)) {
-        if (_reports->get(&report)) {
-            warnx("id:%u status:%u x:%f y:%f z:%f vx:%f vy:%f snr:%f cl:%f",
-                  report.id,
-                  report.status,
-                  (double)report.pos_x,
-                  (double)report.pos_y,
-                  (double)report.pos_z,
-                  (double)report.vel_x,
-                  (double)report.vel_y,
-                  (double)report.snr,
-                  (double)report.cl);
-
-        }
-        /** sleep for 0.1 seconds **/
-        usleep(100000);
-    }
+//        }
+//        /** sleep for 0.1 seconds **/
+//        usleep(100000);
+//    }
     return OK;
 }
-/** device start **/
-void UAVLAS::start()
-{
-    _reports->flush();
-    work_queue(HPWORK, &_work, (worker_t)&UAVLAS::cycle_trampoline, this, 1);
-}
-/** device stop **/
-void UAVLAS::stop()
-{
-    work_cancel(HPWORK, &_work);
-}
-/** device work cycle **/
-void UAVLAS::cycle_trampoline(void *arg)
-{
-    UAVLAS *device = (UAVLAS *)arg;
+///** device start **/
+//void UAVLAS::start()
+//{
+//    _reports->flush();
+//    work_queue(HPWORK, &_work, (worker_t)&UAVLAS::cycle_trampoline, this, 1);
+//}
 
-    if (g_uavlas != nullptr) {
-        device->cycle();
-    }
-}
 /** device work cycle implementation**/
-void UAVLAS::cycle()
+void UAVLAS::update()
 {
     check_params(false);
     update_topics();
     read_device();
-    work_queue(HPWORK, &_work, (worker_t)&UAVLAS::cycle_trampoline, this, USEC2TICK(UAVLAS_CONVERSION_INTERVAL_US));
+}
+
+void UAVLAS::status()
+{
+    struct uavlas_report_s report;
+    if (_reports->get(&report)) {
+        PX4_INFO("id:%u status:%u x:%f y:%f z:%f vx:%f vy:%f snr:%f cl:%f",
+              report.id,
+              report.status,
+              (double)report.pos_x,
+              (double)report.pos_y,
+              (double)report.pos_z,
+              (double)report.vel_x,
+              (double)report.vel_y,
+              (double)report.snr,
+              (double)report.cl);
+    }
 }
 /** device read lolevel implementation**/
-ssize_t UAVLAS::read(struct file *filp, char *buffer, size_t buflen)
-{
-    unsigned count = buflen / sizeof(struct uavlas_report_s);
-    //struct uavlas_report_s *rbuf = reinterpret_cast<struct uavlas_report_s *>(buffer);
-    struct uavlas_report_s rbuf;
-    int ret = 0;
-
-    if (count < 1) {
-        return -ENOSPC;
-    }
-    while (count--) {
-        if (_reports->get(&rbuf)) {
-            memcpy(buffer, &rbuf, sizeof(rbuf));
-            ret += sizeof(rbuf);
-            buffer+=sizeof(rbuf);
-        }
-    }
-    return ret ? ret : -EAGAIN;
-    return ret;
-}
-//int UAVLAS::read_device_word(uint16_t *word)
+//ssize_t UAVLAS::read(struct file *filp, char *buffer, size_t buflen)
 //{
-//    uint8_t bytes[2];
-//    memset(bytes, 0, sizeof bytes);
+//    unsigned count = buflen / sizeof(struct uavlas_report_s);
+//    //struct uavlas_report_s *rbuf = reinterpret_cast<struct uavlas_report_s *>(buffer);
+//    struct uavlas_report_s rbuf;
+//    int ret = 0;
 
-//    int status = transfer(nullptr, 0, &bytes[0], 2);
-//    *word = bytes[1] << 8 | bytes[0];
-
-//    return status;
+//    if (count < 1) {
+//        return -ENOSPC;
+//    }
+//    while (count--) {
+//        if (_reports->get(&rbuf)) {
+//            memcpy(buffer, &rbuf, sizeof(rbuf));
+//            ret += sizeof(struct uavlas_report_s);
+//            buffer+=sizeof(struct uavlas_report_s);
+//        }
+//    }
+//    return ret ? ret : -EAGAIN;
 //}
+int UAVLAS::read_device_word(uint16_t *word)
+{
+    uint8_t bytes[2];
+    memset(bytes, 0, sizeof bytes);
+
+    int status = transfer(nullptr, 0, &bytes[0], 2);
+    *word = bytes[1] << 8 | bytes[0];
+
+    return status;
+}
 
 int UAVLAS::read_device_block(struct uavlas_report_s *block)
 {
@@ -265,6 +261,7 @@ int UAVLAS::read_device()
     //struct uavlas_target_s report;
     struct uavlas_report_s orb_report;
     struct landing_target_pose_s _target_pose;
+
 
     orb_report.timestamp = hrt_absolute_time();
 
@@ -400,3 +397,4 @@ void UAVLAS::update_params()
     param_get(_paramHandle.scale_y, &_params.scale_y);
 }
 
+}
