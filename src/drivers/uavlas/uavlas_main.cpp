@@ -57,10 +57,6 @@ static bool infoDisplay = false;
 
 extern "C" __EXPORT int uavlas_main(int argc, char *argv[]);
 
-
-
-
-
 UAVLAS *create_device(int bus)
 {
     /* create the driver */
@@ -76,9 +72,8 @@ UAVLAS *create_device(int bus)
         return u;
     }
     else {
-       // PX4_WARN("failed to initialize device, on bus %d",bus);
+        // PX4_WARN("failed to initialize device, on bus %d",bus);
     }
-
     /* destroy it again because it failed. */
     UAVLAS *tmp_uavlas = u;
     u = nullptr;
@@ -121,20 +116,17 @@ int uavlas_thread(int argc, char *argv[])
 
         px4_usleep(1000000 / UAVLAS_UPDATE_RATE);
     }
-
     if (uavlas != nullptr) {
-
         delete uavlas;
     }
 
-    PX4_INFO("Exiting");
+    PX4_INFO("exiting");
 
     thread_running = false;
 
     return 0;
-
-
 }
+
 void uavlas_usage()
 {
     PX4_INFO("missing command: try 'start', 'stop', 'info', 'status'");
@@ -150,7 +142,7 @@ int uavlas_main(int argc, char *argv[])
     int myoptind = 1;
     const char *myoptarg = nullptr;
 
-    while ((ch = px4_getopt(argc, argv, "b:t:", &myoptind, &myoptarg)) != EOF) {
+    while ((ch = px4_getopt(argc, argv, "t:", &myoptind, &myoptarg)) != EOF) {
         switch (ch) {
         case 't':
             secs = (uint8_t)atoi(myoptarg);
@@ -160,14 +152,12 @@ int uavlas_main(int argc, char *argv[])
             return -1;
         }
     }
-
     if (myoptind >= argc) {
         uavlas_usage();
         exit(1);
     }
 
     const char *command = argv[myoptind];
-
     /** start driver **/
     if (!strcmp(command, "start")) {
         if (thread_running) {
@@ -182,23 +172,28 @@ int uavlas_main(int argc, char *argv[])
                                          2000,
                                          uavlas_thread,
                                          (argv) ? (char *const *)&argv[2] : nullptr);
-     exit(OK);
+        exit(OK);
+    }
+    if (!thread_running) {
+        PX4_WARN("uavlas not running");
+        uavlas_usage();
+        exit(0);
     }
     /** stop the driver **/
     if (!strcmp(command, "stop")) {
-        if (!thread_running) {
-            PX4_WARN("landing_target_estimator not running");
-        }
+
         thread_should_exit = true;
         exit(OK);
     }
     /** Print driver information **/
     if (!strcmp(command, "info")) {
+
         infoDisplay = true;
         exit(OK);
     }
     /** test driver **/
     if (!strcmp(command, "status")) {
+
         statusDisplayTime = secs * STATUS_UPDATE_RATE;
         exit(OK);
     }

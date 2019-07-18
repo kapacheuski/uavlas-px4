@@ -98,22 +98,6 @@ const int busses_to_try[] = {
     -1
 };
 
-//// Global definitions
-//struct uavlas_target_s {
-//    uint64_t timestamp;
-//    uint16_t id;	 /** target id **/
-//    uint16_t status; /** target status **/
-
-//    int16_t  pos_x;  /** x-axis distance (NE) from beacon **/
-//    int16_t  pos_y;	 /** y-axis distance (NE) from beacon **/
-//    uint16_t pos_z;	 /** z-axis distance (Altitude) from beacon **/
-//    int16_t  vel_x;  /** x-axis velocity (NE) from beacon **/
-//    int16_t  vel_y;	 /** y-axis velocity (NE) from beacon **/
-
-//    uint8_t  snr;    /** Signal to noise ratio in db **/
-//    uint8_t  cl;     /** Commin lighting level in db **/
-//}__attribute__((packed));
-
 // Device class
 class UAVLAS : public device::I2C {
 public:
@@ -123,20 +107,12 @@ public:
     virtual int init();
     virtual int probe();
     virtual int info();
-    virtual int test(uint16_t secs);
-
-   // virtual ssize_t read(struct file *filp, char *buffer, size_t buflen);
 
     void		update();
     void		status();
 private:
-    // Device Control Functions
-    //void 		start();
-    //void 		stop();
-
 
     int 		read_device();
-    int 		read_device_word(uint16_t *word);
     int 		read_device_block(struct uavlas_report_s *block);
 
     void check_params(const bool force);
@@ -178,7 +154,8 @@ private:
     struct vehicle_local_position_s	_vehicleLocalPosition;
 
     // Device data section
-    ringbuffer::RingBuffer *_reports;
+    //ringbuffer::RingBuffer *_reports;
+    struct uavlas_report_s orb_report;
     bool _sensor_ok;
     uint32_t _read_failures;
     int _orb_class_instance;
