@@ -35,139 +35,36 @@
  * @file uavlas.cpp
  * @author Yury Kapacheuski
  *
- * Driver for an ULS-Qx1 sensor connected via I2C.
+ * Driver for an ULS-QR1 UAVLAS sensor connected via I2C.
  *
  * Created on: March 28, 2019
  **/
 
-#include <fcntl.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
+#include "uavlas.h"
 
-#include <board_config.h>
-#include <drivers/device/i2c.h>
-#include <drivers/device/ringbuffer.h>
-#include <drivers/drv_hrt.h>
-
-#include <px4_getopt.h>
-
-#include <nuttx/clock.h>
-#include <nuttx/wqueue.h>
-#include <systemlib/err.h>
-
-#include <uORB/uORB.h>
-#include <uORB/topics/uavlas_report.h>
-
-#define UAVLAS_I2C_BUS			PX4_I2C_BUS_EXPANSION
-#define UAVLAS_I2C_ADDRESS		0x55 /** 7-bit address (non shifted) **/
-#define UAVLAS_CONVERSION_INTERVAL_US	100000U /** us = 100ms = 10Hz **/
-
-
-#ifndef CONFIG_SCHED_WORKQUEUE
-# error This requires CONFIG_SCHED_WORKQUEUE.
-#endif
-
-#define UAVLAS_BASE_DEVICE_PATH	"/dev/uavlas"
-#define UAVLAS0_DEVICE_PATH	"/dev/uavlas0"
-
-const int busses_to_try[] = {
-    PX4_I2C_BUS_EXPANSION,
-#ifdef PX4_I2C_BUS_ESC
-    PX4_I2C_BUS_ESC,
-#endif
-#ifdef PX4_I2C_BUS_ONBOARD
-    PX4_I2C_BUS_ONBOARD,
-#endif
-#ifdef PX4_I2C_BUS_EXPANSION1
-    PX4_I2C_BUS_EXPANSION1,
-#endif
-#ifdef PX4_I2C_BUS_EXPANSION2
-    PX4_I2C_BUS_EXPANSION2,
-#endif
-
-    -1
-};
-
-struct uavlas_target_s {
-    uint64_t timestamp;
-    uint16_t id;	 /** target id **/
-    uint16_t status; /** target status **/
-
-    int16_t  pos_x;  /** x-axis distance (NE) from beacon **/
-    int16_t  pos_y;	 /** y-axis distance (NE) from beacon **/
-    uint16_t pos_z;	 /** z-axis distance (Altitude) from beacon **/
-    int16_t  vel_x;  /** x-axis velocity (NE) from beacon **/
-    int16_t  vel_y;	 /** y-axis velocity (NE) from beacon **/
-
-
-    uint8_t  snr;    /** Signal to noise ratio in db **/
-    uint8_t  cl;     /** Commin lighting level in db **/
-
-}__attribute__((packed));
-
-
-class UAVLAS : public device::I2C {
-public:
-    UAVLAS(int bus = UAVLAS_I2C_BUS, int address = UAVLAS_I2C_ADDRESS);
-    virtual ~UAVLAS();
-
-    virtual int init();
-    virtual int probe();
-    virtual int info();
-    virtual int test(uint16_t secs);
-
-    virtual ssize_t read(struct file *filp, char *buffer, size_t buflen);
-
-private:
-
-    void 		start();
-    void 		stop();
-    static void	cycle_trampoline(void *arg);
-    void		cycle();
-
-    int 		read_device();
-    int 		read_device_word(uint16_t *word);
-    int 		read_device_block(struct uavlas_target_s *block);
-
-    ringbuffer::RingBuffer *_reports;
-    bool _sensor_ok;
-    work_s _work;
-    uint32_t _read_failures;
-
-    int _orb_class_instance;
-    orb_advert_t _uavlas_report_topic;
-};
-
-namespace {
-UAVLAS *g_uavlas = nullptr;
-}
-
-void uavlas_usage();
-bool check_device(int bus);
-
-extern "C" __EXPORT int uavlas_main(int argc, char *argv[]);
-
-/** constructor **/
 UAVLAS::UAVLAS(int bus, int address) :
     I2C("uavlas", UAVLAS0_DEVICE_PATH, bus, address, 400000),
+    _vehicleLocalPosition_valid(false),
     _reports(nullptr),
     _sensor_ok(false),
     _read_failures(0),
     _orb_class_instance(-1),
-    _uavlas_report_topic(nullptr)
+    _uavlasReportPub(nullptr),
+   _targetPosePub(nullptr)
 {
+    _paramHandle.mode = param_find("LTEST_MODE");
+    _paramHandle.scale_x = param_find("LTEST_SCALE_X");
+    _paramHandle.scale_y = param_find("LTEST_SCALE_Y");
+
     memset(&_work, 0, sizeof(_work));
+
+    initialize_topics();
+    check_params(true);
 }
 
 UAVLAS::~UAVLAS()
 {
     stop();
-
-    /** clear reports queue **/
     if (_reports != nullptr) {
         delete _reports;
     }
@@ -182,7 +79,7 @@ int UAVLAS::init()
         return ret;
     }
 
-    _reports = new ringbuffer::RingBuffer(2, sizeof(struct uavlas_target_s));
+    _reports = new ringbuffer::RingBuffer(2, sizeof(struct uavlas_report_s));
 
     if (_reports == nullptr) {
         return ENOTTY;
@@ -194,7 +91,6 @@ int UAVLAS::init()
         return OK;
     }
 }
-
 /** probe the device is on the I2C bus **/
 int UAVLAS::probe()
 {
@@ -211,13 +107,12 @@ int UAVLAS::probe()
 
     return OK;
 }
-
+/** get device status information **/
 int UAVLAS::info()
 {
     if (g_uavlas == nullptr) {
         errx(1, "uavlas device driver is not running");
     }
-
     /** display reports in queue **/
     if (_sensor_ok) {
         _reports->print_info("report queue: ");
@@ -230,56 +125,52 @@ int UAVLAS::info()
 
     return OK;
 }
-
+/** device test **/
 int UAVLAS::test(uint16_t secs)
 {
     if (g_uavlas == nullptr) {
         errx(1, "uavlas device driver is not running");
     }
-
     if (!_sensor_ok) {
         errx(1, "sensor not ready");
     }
 
     warnx("Display sensor data %u sec.",secs);
 
-    struct uavlas_target_s report;
+    struct uavlas_report_s report;
     uint64_t start_time = hrt_absolute_time();
 
     while ((hrt_absolute_time() - start_time) < (1000000*secs)) {
         if (_reports->get(&report)) {
-            warnx("id:%u status:%u x:%d y:%d z:%u vx:%d vy:%d snr:%u cl:%u",
+            warnx("id:%u status:%u x:%f y:%f z:%f vx:%f vy:%f snr:%f cl:%f",
                   report.id,
                   report.status,
-                  report.pos_x,
-                  report.pos_y,
-                  report.pos_z,
-                  report.vel_x,
-                  report.vel_y,
-                  report.snr,
-                  report.cl);
+                  (double)report.pos_x,
+                  (double)report.pos_y,
+                  (double)report.pos_z,
+                  (double)report.vel_x,
+                  (double)report.vel_y,
+                  (double)report.snr,
+                  (double)report.cl);
 
         }
         /** sleep for 0.1 seconds **/
         usleep(100000);
     }
-
     return OK;
 }
-
+/** device start **/
 void UAVLAS::start()
 {
     _reports->flush();
-
-
     work_queue(HPWORK, &_work, (worker_t)&UAVLAS::cycle_trampoline, this, 1);
 }
-
+/** device stop **/
 void UAVLAS::stop()
 {
     work_cancel(HPWORK, &_work);
 }
-
+/** device work cycle **/
 void UAVLAS::cycle_trampoline(void *arg)
 {
     UAVLAS *device = (UAVLAS *)arg;
@@ -288,89 +179,47 @@ void UAVLAS::cycle_trampoline(void *arg)
         device->cycle();
     }
 }
-
+/** device work cycle implementation**/
 void UAVLAS::cycle()
 {
+    check_params(false);
+    update_topics();
     read_device();
-
     work_queue(HPWORK, &_work, (worker_t)&UAVLAS::cycle_trampoline, this, USEC2TICK(UAVLAS_CONVERSION_INTERVAL_US));
 }
-
+/** device read lolevel implementation**/
 ssize_t UAVLAS::read(struct file *filp, char *buffer, size_t buflen)
 {
-    unsigned count = buflen / sizeof(struct uavlas_target_s);
-    struct uavlas_target_s *rbuf = reinterpret_cast<struct uavlas_target_s *>(buffer);
+    unsigned count = buflen / sizeof(struct uavlas_report_s);
+    //struct uavlas_report_s *rbuf = reinterpret_cast<struct uavlas_report_s *>(buffer);
+    struct uavlas_report_s rbuf;
     int ret = 0;
 
     if (count < 1) {
         return -ENOSPC;
     }
-
     while (count--) {
-        if (_reports->get(rbuf)) {
-            ret += sizeof(*rbuf);
-            ++rbuf;
+        if (_reports->get(&rbuf)) {
+            memcpy(buffer, &rbuf, sizeof(rbuf));
+            ret += sizeof(rbuf);
+            buffer+=sizeof(rbuf);
         }
     }
-
     return ret ? ret : -EAGAIN;
     return ret;
 }
+//int UAVLAS::read_device_word(uint16_t *word)
+//{
+//    uint8_t bytes[2];
+//    memset(bytes, 0, sizeof bytes);
 
+//    int status = transfer(nullptr, 0, &bytes[0], 2);
+//    *word = bytes[1] << 8 | bytes[0];
 
-int UAVLAS::read_device()
-{
-    struct uavlas_target_s report;
+//    return status;
+//}
 
-    report.timestamp = hrt_absolute_time();
-
-    if (read_device_block(&report) != OK) {
-        return -ENOTTY;
-    }
-
-    _reports->force(&report);
-
-    struct uavlas_report_s orb_report;
-
-    orb_report.timestamp = report.timestamp;
-    orb_report.id = report.id;
-    orb_report.status = report.status;
-
-    orb_report.pos_x     = (float32)report.pos_x/100.0f;
-    orb_report.pos_y     = (float32)report.pos_y/100.0f;
-    orb_report.pos_z     = (float32)report.pos_z/100.0f;
-    orb_report.vel_x     = (float32)report.vel_x/100.0f;
-    orb_report.vel_y     = (float32)report.vel_y/100.0f;
-
-
-    if (_uavlas_report_topic != nullptr) {
-        orb_publish(ORB_ID(uavlas_report), _uavlas_report_topic, &orb_report);
-
-    }
-    else {
-        _uavlas_report_topic = orb_advertise_multi(ORB_ID(uavlas_report), &orb_report, &_orb_class_instance, ORB_PRIO_LOW);
-
-        if (_uavlas_report_topic == nullptr) {
-            DEVICE_LOG("failed to create uavlas_report object. Did you start uOrb?");
-        }
-
-    }
-
-    return OK;
-}
-
-int UAVLAS::read_device_word(uint16_t *word)
-{
-    uint8_t bytes[2];
-    memset(bytes, 0, sizeof bytes);
-
-    int status = transfer(nullptr, 0, &bytes[0], 2);
-    *word = bytes[1] << 8 | bytes[0];
-
-    return status;
-}
-
-int UAVLAS::read_device_block(struct uavlas_target_s *block)
+int UAVLAS::read_device_block(struct uavlas_report_s *block)
 {
     uint8_t bytes[17];
     memset(bytes, 0, sizeof bytes);
@@ -401,140 +250,153 @@ int UAVLAS::read_device_block(struct uavlas_target_s *block)
     block->id = id;
     block->status = stat;
 
-    block->pos_x = pos_x;
-    block->pos_y = pos_y;
-    block->pos_z = pos_z;
-    block->vel_x = vel_x;
-    block->vel_y = vel_y;
+    block->pos_x = pos_x/100.0f * _params.scale_x;
+    block->pos_y = pos_y/100.0f * _params.scale_y;
+    block->pos_z = pos_z/100.0f;
+    block->vel_x = vel_x/100.0f * _params.scale_x;
+    block->vel_y = vel_y/100.0f * _params.scale_y;
     block->snr   = snr;
     block->cl    = cl;
 
     return status;
 }
-
-void uavlas_usage()
+int UAVLAS::read_device()
 {
-    warnx("missing command: try 'start', 'stop', 'info', 'test'");
-    warnx("options:");
-    warnx("    -b i2cbus");
-    warnx("    -t test time (sec)");
+    //struct uavlas_target_s report;
+    struct uavlas_report_s orb_report;
+    struct landing_target_pose_s _target_pose;
 
-}
-bool check_device(int bus)
-{
-    /* create the driver */
-    /* UAVLAS("trying bus %d", *cur_bus); */
-    g_uavlas = new UAVLAS(bus, UAVLAS_I2C_ADDRESS);
+    orb_report.timestamp = hrt_absolute_time();
 
-    if (g_uavlas == nullptr) {
-        /* this is a fatal error */
-        warnx("failed to allocated memory for driver");
-
+    if (read_device_block(&orb_report) != OK) {
+        return -ENOTTY;
     }
-    else if (OK == g_uavlas->init()) {
-        /* success! */
-        return true;
+
+    _reports->force(&orb_report);
+
+//    orb_report.timestamp = report.timestamp;
+//    orb_report.id = report.id;
+//    orb_report.status = report.status;
+//    orb_report.snr = report.snr;
+//    orb_report.cl = report.cl;
+
+
+//    orb_report.pos_x     = (float32)report.pos_x/100.0f;
+//    orb_report.pos_y     = (float32)report.pos_y/100.0f;
+//    orb_report.pos_z     = (float32)report.pos_z/100.0f;
+//    orb_report.vel_x     = (float32)report.vel_x/100.0f;
+//    orb_report.vel_y     = (float32)report.vel_y/100.0f;
+
+    if (_uavlasReportPub != nullptr) {
+        orb_publish(ORB_ID(uavlas_report), _uavlasReportPub, &orb_report);
+
     }
     else {
-       /* warnx("failed to initialize device, on bus %d",bus);*/
+        _uavlasReportPub = orb_advertise_multi(ORB_ID(uavlas_report), &orb_report, &_orb_class_instance, ORB_PRIO_LOW);
+
+        if (_uavlasReportPub == nullptr) {
+            DEVICE_LOG("failed to create uavlas_report object. Did you start uOrb?");
+        }
+
+    }
+    // Update landing_target_pose
+    if ((!_vehicleLocalPosition_valid) ||
+        (!PX4_ISFINITE(orb_report.pos_y) || !PX4_ISFINITE(orb_report.pos_x)|| !PX4_ISFINITE(orb_report.pos_z))||
+        (orb_report.status != 7)) {
+        // unable to update - no all values good.
+        return OK;
     }
 
-    /* destroy it again because it failed. */
-    UAVLAS *tmp_uavlas = g_uavlas;
-    g_uavlas = nullptr;
-    delete tmp_uavlas;
-    return false;
+    _target_pose.timestamp = orb_report.timestamp;
+
+    _target_pose.is_static = (_params.mode == TargetMode::Stationary);
+
+    _target_pose.rel_pos_valid = true;
+    _target_pose.rel_vel_valid = true;
+    _target_pose.x_rel = orb_report.pos_x;
+    _target_pose.y_rel = orb_report.pos_y;
+    _target_pose.z_rel = orb_report.pos_z;
+    _target_pose.vx_rel = orb_report.vel_x;
+    _target_pose.vy_rel = orb_report.vel_y;
+
+    _target_pose.cov_x_rel = orb_report.pos_z/20.0f; // Cov approximation
+    _target_pose.cov_y_rel = orb_report.pos_z/20.0f; // Cov approximation
+
+    _target_pose.cov_vx_rel = orb_report.pos_z/20.0f; // Cov approximation
+    _target_pose.cov_vy_rel = orb_report.pos_z/20.0f; // Cov approximation
+
+    if (_vehicleLocalPosition_valid && _vehicleLocalPosition.xy_valid) {
+        _target_pose.x_abs = orb_report.pos_x + _vehicleLocalPosition.x;
+        _target_pose.y_abs = orb_report.pos_y + _vehicleLocalPosition.y;
+        _target_pose.z_abs = orb_report.pos_z + _vehicleLocalPosition.z;
+        _target_pose.abs_pos_valid = true;
+
+    }
+    else {
+        _target_pose.abs_pos_valid = false;
+    }
+
+    if (_targetPosePub == nullptr) {
+        _targetPosePub = orb_advertise(ORB_ID(landing_target_pose), &_target_pose);
+
+    }
+    else {
+        orb_publish(ORB_ID(landing_target_pose), _targetPosePub, &_target_pose);
+    }
+
+    return OK;
 }
 
-int uavlas_main(int argc, char *argv[])
+
+void UAVLAS::check_params(const bool force)
 {
-    int i2cdevice = -1;// UAVLAS_I2C_BUS;
-    int secs = 10;
-    int ch;
-    int myoptind = 1;
-    const char *myoptarg = nullptr;
+    bool updated;
+    parameter_update_s paramUpdate;
 
-    while ((ch = px4_getopt(argc, argv, "b:t:", &myoptind, &myoptarg)) != EOF) {
-        switch (ch) {
-        case 'b':
-            i2cdevice = (uint8_t)atoi(myoptarg);
-            break;
-        case 't':
-            secs = (uint8_t)atoi(myoptarg);
-            break;
+    orb_check(_parameterSub, &updated);
 
-        default:
-            PX4_WARN("Unknown option!");
-            return -1;
-        }
+    if (updated) {
+        orb_copy(ORB_ID(parameter_update), _parameterSub, &paramUpdate);
     }
 
-    if (myoptind >= argc) {
-        uavlas_usage();
-        exit(1);
+    if (updated || force) {
+        update_params();
     }
-
-    const char *command = argv[myoptind];
-
-    /** start driver **/
-    if (!strcmp(command, "start")) {
-        if (g_uavlas != nullptr) {
-            errx(1, "driver has already been started");
-        }
-
-        if (i2cdevice == -1) {
-            const int *cur_bus = busses_to_try;
-            while (*cur_bus != -1) {
-                /* create the driver */
-                /* UAVLAS("trying bus %d", *cur_bus); */
-                if (check_device(*cur_bus)) {
-                    i2cdevice = *cur_bus;
-                    break;
-                }
-                /* try next! */
-                cur_bus++;
-            }
-        }
-        else if (!check_device(i2cdevice)) {
-            i2cdevice = -1;
-        }
-
-        if (i2cdevice == -1) {
-            errx(1, "unable to find device");
-        }
-        PX4_INFO("Started on bus#:%d",i2cdevice);
-        exit(0);
-    }
-
-    /** need the driver past this point **/
-    if (g_uavlas == nullptr) {
-        warnx("not started");
-        uavlas_usage();
-        exit(1);
-    }
-
-    /** stop the driver **/
-    if (!strcmp(command, "stop")) {
-        UAVLAS *tmp_uavlas = g_uavlas;
-        g_uavlas = nullptr;
-        delete tmp_uavlas;
-        warnx("uavlas stopped");
-        exit(OK);
-    }
-
-    /** Print driver information **/
-    if (!strcmp(command, "info")) {
-        g_uavlas->info();
-        exit(OK);
-    }
-
-    /** test driver **/
-    if (!strcmp(command, "test")) {
-        g_uavlas->test(secs);
-        exit(OK);
-    }
-
-    /** display usage info **/
-    uavlas_usage();
-    exit(0);
 }
+void UAVLAS::initialize_topics()
+{
+    _vehicleLocalPositionSub = orb_subscribe(ORB_ID(vehicle_local_position));
+    _parameterSub = orb_subscribe(ORB_ID(parameter_update));
+}
+
+void UAVLAS::update_topics()
+{
+    _vehicleLocalPosition_valid = orb_update(ORB_ID(vehicle_local_position), _vehicleLocalPositionSub,
+                                  &_vehicleLocalPosition);
+}
+
+bool UAVLAS::orb_update(const struct orb_metadata *meta, int handle, void *buffer)
+{
+    bool newData = false;
+    // check if there is new data to grab
+    if (orb_check(handle, &newData) != OK) {
+        return false;
+    }
+    if (!newData) {
+        return false;
+    }
+    if (orb_copy(meta, handle, buffer) != OK) {
+        return false;
+    }
+    return true;
+}
+
+void UAVLAS::update_params()
+{
+    int32_t mode = 0;
+    param_get(_paramHandle.mode, &mode);
+    _params.mode = (TargetMode)mode;
+    param_get(_paramHandle.scale_x, &_params.scale_x);
+    param_get(_paramHandle.scale_y, &_params.scale_y);
+}
+

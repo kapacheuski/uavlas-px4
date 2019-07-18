@@ -36,6 +36,7 @@ px4_add_module(
 	COMPILE_FLAGS
 	SRCS
 		uavlas.cpp
+		uavlas_main.cpp
 	DEPENDS
 	)
 

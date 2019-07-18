@@ -11,4 +11,6 @@ float32 pos_y # offset from beacon in E axis (in m)
 float32 pos_z # offset from beacon in D axis (altitude in m)
 float32 vel_x # velocity x axis (m/s)
 float32 vel_y # velocity y axis (m/s)
+float32 snr   # signal to noise ratio (db)
+float32 cl    # common lighting level (db)
 
