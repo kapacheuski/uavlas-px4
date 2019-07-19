@@ -52,6 +52,8 @@ UAVLAS *g_uavlas = nullptr;
 static bool thread_should_exit = false;	/**< daemon exit flag */
 static bool thread_running = false;		/**< daemon status flag */
 static int daemon_task;			/**< Handle of daemon task / thread */
+static bool sensor_ready = false;			/**< Handle of daemon task / thread */
+
 static int statusDisplayTime = 0;
 static bool infoDisplay = false;
 
@@ -90,7 +92,8 @@ int uavlas_thread(int argc, char *argv[])
     thread_should_exit = true;
 
     const int *cur_bus = busses_to_try;
-    while (*cur_bus != -1) {
+    px4_usleep(5000000); // Wait 5 sec for sensor start up
+    while ((*cur_bus != -1) && (thread_should_exit)) {
         uavlas = create_device(*cur_bus);
         if (uavlas != nullptr) {
             PX4_INFO("Started on bus#:%d",*cur_bus);
@@ -100,9 +103,15 @@ int uavlas_thread(int argc, char *argv[])
         /* try next! */
         cur_bus++;
     }
+    if(thread_should_exit){
+        PX4_INFO("uavlas unable to connect.");
+        thread_running = false;
+        return 0;
+    };
 
     int statusUpdateTime = 0;
     while (!thread_should_exit) {
+
         uavlas->update();
         if (statusDisplayTime && (++statusUpdateTime >= (10/STATUS_UPDATE_RATE))) {
             statusDisplayTime--;
@@ -113,9 +122,10 @@ int uavlas_thread(int argc, char *argv[])
             infoDisplay = false;
             uavlas->info();
         }
-
+        sensor_ready = true;
         px4_usleep(1000000 / UAVLAS_UPDATE_RATE);
     }
+    sensor_ready = false;
     if (uavlas != nullptr) {
         delete uavlas;
     }
@@ -179,21 +189,27 @@ int uavlas_main(int argc, char *argv[])
         uavlas_usage();
         exit(0);
     }
+    if (!sensor_ready) {
+        PX4_WARN("uavlas sensor not ready");
+        uavlas_usage();
+        exit(0);
+    }
+
     /** stop the driver **/
     if (!strcmp(command, "stop")) {
-
+        PX4_INFO("stopping driver");
         thread_should_exit = true;
         exit(OK);
     }
     /** Print driver information **/
     if (!strcmp(command, "info")) {
-
+        PX4_INFO("device info:");
         infoDisplay = true;
         exit(OK);
     }
     /** test driver **/
     if (!strcmp(command, "status")) {
-
+        PX4_INFO("device status:");
         statusDisplayTime = secs * STATUS_UPDATE_RATE;
         exit(OK);
     }

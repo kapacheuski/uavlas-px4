@@ -90,6 +90,7 @@ int UAVLAS::probe()
 /** get device status information **/
 int UAVLAS::info()
 {
+    PX4_INFO("Yury Kapacheuski yk@uavlas.com 2019");
     /** display reports in queue **/
     if (_sensor_ok) {
         PX4_INFO("sensor is ok");
