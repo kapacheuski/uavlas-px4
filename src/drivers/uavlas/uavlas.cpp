@@ -115,11 +115,11 @@ void UAVLAS::status()
     PX4_INFO("id:%u status:%u x:%f y:%f z:%f vx:%f vy:%f snr:%f cl:%f",
              orb_report.id,
              orb_report.status,
-             (double)orb_report.pos_x,
-             (double)orb_report.pos_y,
-             (double)orb_report.pos_z,
-             (double)orb_report.vel_x,
-             (double)orb_report.vel_y,
+             (double)orb_report.pos_x*100.0,
+             (double)orb_report.pos_y*100.0,
+             (double)orb_report.pos_z*100.0,
+             (double)orb_report.vel_x*100.0,
+             (double)orb_report.vel_y*100.0,
              (double)orb_report.snr,
              (double)orb_report.cl);
 }
