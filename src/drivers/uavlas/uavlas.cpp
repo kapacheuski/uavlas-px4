@@ -112,7 +112,7 @@ void UAVLAS::update()
 
 void UAVLAS::status()
 {
-    PX4_INFO("id:%u status:%u x:%f y:%f z:%f vx:%f vy:%f snr:%f cl:%f",
+    warnx("id:%u status:%u x:%f y:%f z:%f vx:%f vy:%f snr:%f cl:%f sl:%f RE:%d",
              orb_report.id,
              orb_report.status,
              (double)orb_report.pos_x*100.0,
@@ -121,7 +121,9 @@ void UAVLAS::status()
              (double)orb_report.vel_x*100.0,
              (double)orb_report.vel_y*100.0,
              (double)orb_report.snr,
-             (double)orb_report.cl);
+             (double)orb_report.cl,
+             (double)orb_report.sl,
+             _read_failures);
 }
 
 int UAVLAS::read_device()
@@ -190,42 +192,49 @@ int UAVLAS::read_device()
 
 int UAVLAS::read_device_block(struct uavlas_report_s *block)
 {
-    uint8_t bytes[17];
+    uint8_t bytes[18];
     memset(bytes, 0, sizeof bytes);
 
     int status = transfer(nullptr, 0, &bytes[0], sizeof bytes);
-    uint16_t id     = bytes[1] << 8 | bytes[0];
-    uint16_t stat   = bytes[3] << 8 | bytes[2];
-    int16_t  pos_y  = bytes[5] << 8 | bytes[4];
-    int16_t  pos_x  = bytes[7] << 8 | bytes[6];
-    int16_t  pos_z  = bytes[9] << 8 | bytes[8];
-    int16_t  vel_y  = bytes[11] << 8 | bytes[10];
-    int16_t  vel_x  = bytes[13] << 8 | bytes[12];
-    uint8_t  snr    = bytes[14];
-    uint8_t  cl     = bytes[15];
-    uint8_t  crc    = bytes[16];
+    if(status == OK){
+        uint16_t id     = bytes[1] << 8 | bytes[0];
+        uint16_t stat   = bytes[3] << 8 | bytes[2];
+        int16_t  pos_y  = bytes[5] << 8 | bytes[4];
+        int16_t  pos_x  = bytes[7] << 8 | bytes[6];
+        int16_t  pos_z  = bytes[9] << 8 | bytes[8];
+        int16_t  vel_y  = bytes[11] << 8 | bytes[10];
+        int16_t  vel_x  = bytes[13] << 8 | bytes[12];
+        uint8_t  snr    = bytes[14];
+        uint8_t  cl     = bytes[15];
+        uint8_t  sl     = bytes[16];
 
-    uint8_t tcrc = 0;
-    for (uint i=0; i<sizeof(bytes)-1; i++) {
-        tcrc+=bytes[i];
+        uint8_t  crc    = bytes[17];
+
+        uint8_t tcrc = 0;
+        for (uint i=0; i<sizeof(bytes)-1; i++) {
+            tcrc+=bytes[i];
+        }
+        /** crc check **/
+        if (tcrc != crc) {
+            _read_failures++;
+            return -EIO;
+        }
+        /** convert to angles **/
+        block->id = id;
+        block->status = stat;
+
+        block->pos_x = pos_x/100.0f * _params.scale_x;
+        block->pos_y = pos_y/100.0f * _params.scale_y;
+        block->pos_z = pos_z/100.0f;
+        block->vel_x = vel_x/100.0f * _params.scale_x;
+        block->vel_y = vel_y/100.0f * _params.scale_y;
+        block->snr   = snr;
+        block->cl    = cl;
+        block->sl   = sl;
+    }else
+    {
+       _read_failures++;
     }
-    /** crc check **/
-    if (tcrc != crc) {
-        _read_failures++;
-        return -EIO;
-    }
-    /** convert to angles **/
-    block->id = id;
-    block->status = stat;
-
-    block->pos_x = pos_x/100.0f * _params.scale_x;
-    block->pos_y = pos_y/100.0f * _params.scale_y;
-    block->pos_z = pos_z/100.0f;
-    block->vel_x = vel_x/100.0f * _params.scale_x;
-    block->vel_y = vel_y/100.0f * _params.scale_y;
-    block->snr   = snr;
-    block->cl    = cl;
-
     return status;
 }
 

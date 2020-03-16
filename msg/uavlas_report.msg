@@ -13,4 +13,4 @@ float32 vel_x # velocity x axis (m/s)
 float32 vel_y # velocity y axis (m/s)
 float32 snr   # signal to noise ratio (db)
 float32 cl    # common lighting level (db)
-
+float32 sl    # signal level (db)
