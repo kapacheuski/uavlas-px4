@@ -14,15 +14,13 @@ then
 	then
 		param set SYS_BL_UPDATE 0
 		param save
-		echo "BL update..." >> $LOG_FILE
+		echo "BL update..."
 		bl_update $BL_FILE
-		echo "BL update done" >> $LOG_FILE
+		echo "BL update done"
 		reboot
 	fi
 fi
 unset BL_FILE
 
-if [ $AUTOCNF = yes ]
-then
-	param set SYS_FMU_TASK 0
-fi
+# to minimize cpu usage on older boards limit inner loop to 400 Hz by default
+param set-default IMU_GYRO_RATEMAX 400

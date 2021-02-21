@@ -3,18 +3,39 @@ import codecs
 
 class MarkdownTablesOutput():
     def __init__(self, groups):
-        result = ("# Parameter Reference\n"
-                  "> **Note** **This list is auto-generated from the source code** (using `make parameters_metadata`) and contains the most recent parameter documentation.\n"
-                  "\n")
+        result = (
+"""# Parameter Reference
+
+:::note
+This documentation was auto-generated from the source code for this PX4 version (using `make parameters_metadata`).
+:::
+
+:::tip
+If a listed parameter is missing from the Firmware see: [Finding/Updating Parameters](http://docs.px4.io/master/en/advanced_config/parameters.html#missing).
+:::
+
+<!-- markdown generator: src/lib/parameters/px4params/markdownout.py -->
+
+<style>
+tr > * {
+    vertical-align : top;
+}
+</style>
+
+"""               
+                  )    
+
         for group in groups:
             result += '## %s\n\n' % group.GetName()
-            result += '<table style="width: 100%; table-layout:fixed; font-size:1.5rem; overflow: auto; display:block;">\n'
-            result += ' <colgroup><col style="width: 23%"><col style="width: 46%"><col style="width: 11%"><col style="width: 11%"><col style="width: 9%"></colgroup>\n'
-            result += ' <thead>\n'
-            result += '   <tr><th>Name</th><th>Description</th><th>Min > Max (Incr.)</th><th>Default</th><th>Units</th></tr>\n'
-            result += ' </thead>\n'
-            result += '<tbody>\n'
-            
+            result += (
+"""<table>
+ <colgroup><col style="width: 23%"><col style="width: 46%"><col style="width: 11%"><col style="width: 11%"><col style="width: 9%"></colgroup>
+ <thead>
+   <tr><th>Name</th><th>Description</th><th>Min > Max (Incr.)</th><th>Default</th><th>Units</th></tr>
+ </thead>
+<tbody>
+"""
+            )
             for param in group.GetParams():
                 code = param.GetName()
                 name = param.GetFieldValue("short_desc") or ''
@@ -25,10 +46,11 @@ class MarkdownTablesOutput():
                 def_val = param.GetDefault() or ''
                 unit = param.GetFieldValue("unit") or ''
                 type = param.GetType()
+                is_boolean = param.GetBoolean()
                 reboot_required = param.GetFieldValue("reboot_required") or ''
                 #board = param.GetFieldValue("board") or '' ## Disabled as no board values are defined in any parameters!
                 #decimal = param.GetFieldValue("decimal") or '' #Disabled as is intended for GCS not people
-                #field_codes = param.GetFieldCodes() ## Disabled as not needed for display. 
+                #field_codes = param.GetFieldCodes() ## Disabled as not needed for display.
                 #boolean = param.GetFieldValue("boolean") # or '' # Disabled - does not appear useful.
 
 
@@ -44,7 +66,7 @@ class MarkdownTablesOutput():
                 if increment:
                     max_min_combined+='(%s)' % increment
 
-                if long_desc is not '':
+                if long_desc != '':
                     long_desc = '<p><strong>Comment:</strong> %s</p>' % long_desc
 
                 if name == code:
@@ -56,14 +78,14 @@ class MarkdownTablesOutput():
 
                 enum_codes=param.GetEnumCodes() or '' # Gets numerical values for parameter.
                 enum_output=''
-                # Format codes and their descriptions for display. 
+                # Format codes and their descriptions for display.
                 if enum_codes:
                     enum_output+='<strong>Values:</strong><ul>'
                     enum_codes=sorted(enum_codes,key=float)
                     for item in enum_codes:
                         enum_output+='\n<li><strong>%s:</strong> %s</li> \n' % (item, param.GetEnumValue(item))
                     enum_output+='</ul>\n'
-                    
+
 
                 bitmask_list=param.GetBitmaskList() #Gets bitmask values for parameter
                 bitmask_output=''
@@ -75,8 +97,12 @@ class MarkdownTablesOutput():
                         bitmask_output+='  <li><strong>%s:</strong> %s</li> \n' % (bit, bit_text)
                     bitmask_output+='</ul>\n'
 
-                    
-                result += '<tr>\n <td style="vertical-align: top;">%s (%s)</td>\n <td style="vertical-align: top;"><p>%s</p>%s %s %s %s</td>\n <td style="vertical-align: top;">%s</td>\n <td style="vertical-align: top;">%s </td>\n <td style="vertical-align: top;">%s</td>\n</tr>\n' % (code, type, name, long_desc, enum_output, bitmask_output, reboot_required, max_min_combined, def_val, unit)
+                if is_boolean and def_val=='1':
+                    def_val='Enabled (1)'
+                if is_boolean and def_val=='0':
+                    def_val='Disabled (0)'
+
+                result += '<tr>\n <td>%s (%s)</td>\n <td>%s %s %s %s %s</td>\n <td>%s</td>\n <td>%s</td>\n <td>%s</td>\n</tr>\n' % (code, type, name, long_desc, enum_output, bitmask_output, reboot_required, max_min_combined, def_val, unit)
 
             #Close the table.
             result += '</tbody></table>\n\n'

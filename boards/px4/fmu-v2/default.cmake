@@ -6,20 +6,20 @@ px4_add_board(
 	LABEL default
 	TOOLCHAIN arm-none-eabi
 	ARCHITECTURE cortex-m4
+	CONSTRAINED_MEMORY
 	ROMFSROOT px4fmu_common
 	BOOTLOADER ${PX4_SOURCE_DIR}/ROMFS/px4fmu_common/extras/px4fmuv3_bl.bin
 	IO px4_io-v2_default
 	#TESTING
-	#CONSTRAINED_FLASH
 	#UAVCAN_INTERFACES 2
-
+	CONSTRAINED_FLASH
 	SERIAL_PORTS
 		GPS1:/dev/ttyS3
 		TEL1:/dev/ttyS1
 		TEL2:/dev/ttyS2
 		TEL4:/dev/ttyS6
-
 	DRIVERS
+		adc/board_adc
 		#barometer # all available barometer drivers
 		barometer/ms5611
 		#batt_smbus
@@ -28,53 +28,57 @@ px4_add_board(
 		#differential_pressure # all available differential pressure drivers
 		differential_pressure/ms4525
 		#distance_sensor # all available distance sensor drivers
-		distance_sensor/ll40ls
-		#distance_sensor/sf0x
+		#distance_sensor/ll40ls
+		#distance_sensor/lightware_laser_serial
+		#dshot
 		gps
 		#heater
-		#imu/adis16448
 		#imu # all available imu drivers
+		#imu/analog_devices/adis16448
+		#imu/adis16477
+		#imu/adis16497
 		imu/l3gd20
 		imu/lsm303d
-		imu/mpu6000
-		imu/mpu9250
+		#imu/invensense/icm20608g
+		#imu/invensense/icm20948
+		imu/invensense/mpu6000
+		#imu/invensense/mpu9250
+		#imu/mpu6000 # legacy mpu6000
 		#iridiumsbd
 		#irlock
 		#lights/blinkm
-		#lights/oreoled
 		lights/rgbled
 		#magnetometer # all available magnetometer drivers
 		magnetometer/hmc5883
-		#mkblctrl
 		#optical_flow # all available optical flow drivers
-		optical_flow/px4flow
+		#optical_flow/px4flow
+		#osd
 		#pca9685
+		#power_monitor/ina226
 		#protocol_splitter
 		#pwm_input
-		pwm_out_sim
-		px4fmu
+		#pwm_out_sim
+		pwm_out
 		px4io
 		#roboclaw
-		stm32
-		stm32/adc
-		stm32/tone_alarm
 		#tap_esc
 		#telemetry # all available telemetry drivers
 		#test_ppm
 		tone_alarm
 		#uavcan
-
 	MODULES
+		airspeed_selector
 		#attitude_estimator_q
-		camera_feedback
+		battery_status
+		#camera_feedback
 		commander
 		dataman
 		ekf2
-		events
+		#esc_battery
+		#events
+		flight_mode_manager
 		fw_att_control
 		fw_pos_control_l1
-		#gnd_att_control
-		#gnd_pos_control
 		land_detector
 		#landing_target_estimator
 		load_mon
@@ -82,47 +86,56 @@ px4_add_board(
 		logger
 		mavlink
 		mc_att_control
+		mc_hover_thrust_estimator
 		mc_pos_control
+		mc_rate_control
+		#micrortps_bridge
 		navigator
+		rc_update
+		#rover_pos_control
 		sensors
-		vmount
-		vtol_att_control
-		#wind_estimator
-
+		#sih
+		#temperature_compensation
+		#vmount
+		#vtol_att_control
 	SYSTEMCMDS
 		bl_update
-		#config
+		#dmesg
 		#dumpfile
 		#esc_calib
 		hardfault_log
+		#i2cdetect
 		#led_control
+		mft
 		mixer
 		#motor_ramp
 		#motor_test
 		mtd
 		#nshterm
 		param
-		perf
+		#perf
 		pwm
 		reboot
+		#reflect
 		#sd_bench
+		#shutdown
 		#tests # tests and test runner
 		top
 		#topic_listener
 		tune_control
+		#uorb
 		#usb_connected
-		ver
-
+		#ver
+		#work_queue
 	EXAMPLES
-		#bottle_drop # OBC challenge
+		#fake_gps
 		#fixedwing_control # Tutorial code from https://px4.io/dev/example_fixedwing_control
 		#hello
 		#hwtest # Hardware test
 		#matlab_csv_serial
-		#position_estimator_inav
 		#px4_mavlink_debug # Tutorial code from http://dev.px4.io/en/debug/debug_values.html
 		#px4_simple_app # Tutorial code from http://dev.px4.io/en/apps/hello_sky.html
 		#rover_steering_control # Rover example app
-		#segway
 		#uuv_example_app
+		#work_item
 	)

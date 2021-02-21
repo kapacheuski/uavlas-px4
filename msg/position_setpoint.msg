@@ -42,7 +42,6 @@ int8 landing_gear		# landing gear: see definition of the states in landing_gear.
 
 float32 loiter_radius		# loiter radius (only for fixed wing), in m
 int8 loiter_direction		# loiter direction: 1 = CW, -1 = CCW
-float32 pitch_min		# minimal pitch angle for fixed wing takeoff waypoints
 
 float32 a_x			# acceleration x setpoint
 float32 a_y			# acceleration y setpoint
@@ -54,3 +53,5 @@ float32 acceptance_radius   # navigation acceptance_radius if we're doing waypoi
 
 float32 cruising_speed		# the generally desired cruising speed (not a hard constraint)
 float32 cruising_throttle	# the generally desired cruising throttle (not a hard constraint)
+
+bool disable_weather_vane   # VTOL: disable (in auto mode) the weather vane feature that turns the nose into the wind

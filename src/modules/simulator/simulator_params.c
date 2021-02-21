@@ -38,16 +38,3 @@
  *
  * @author Mohamed Abdelkader <mohamedashraf123@gmail.com>
  */
-#include <parameters/param.h>
-
-/**
- * Simulator Battery drain interval
- *
- * @min 1
- * @max 86400
- * @increment 1
- * @unit s
- *
- * @group SITL
- */
-PARAM_DEFINE_FLOAT(SIM_BAT_DRAIN, 60);

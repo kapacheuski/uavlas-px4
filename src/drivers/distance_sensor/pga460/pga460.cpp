@@ -41,14 +41,21 @@
 #include "pga460.h"
 
 
-extern "C" __EXPORT int pga460_main(int argc, char *argv[]);
-
 PGA460::PGA460(const char *port)
 {
 	// Store port name.
 	strncpy(_port, port, sizeof(_port) - 1);
 	// Enforce null termination.
 	_port[sizeof(_port) - 1] = '\0';
+
+	_device_id.devid_s.devtype = DRV_DIST_DEVTYPE_PGA460;
+	_device_id.devid_s.bus_type = device::Device::DeviceBusType_SERIAL;
+
+	uint8_t bus_num = atoi(&_port[strlen(_port) - 1]); // Assuming '/dev/ttySx'
+
+	if (bus_num < 10) {
+		_device_id.devid_s.bus = bus_num;
+	}
 }
 
 PGA460::~PGA460()
@@ -86,7 +93,7 @@ uint8_t PGA460::calc_checksum(uint8_t *data, const uint8_t size)
 
 int PGA460::close_serial()
 {
-	int ret = px4_close(_fd);
+	int ret = ::close(_fd);
 
 	if (ret != 0) {
 		PX4_WARN("Could not close serial port");
@@ -294,7 +301,7 @@ float PGA460::get_temperature()
 
 int PGA460::open_serial()
 {
-	_fd = px4_open(_port, O_RDWR | O_NOCTTY | O_NONBLOCK);
+	_fd = ::open(_port, O_RDWR | O_NOCTTY | O_NONBLOCK);
 
 	if (_fd < 0) {
 		PX4_WARN("Failed to open serial port");
@@ -313,7 +320,6 @@ int PGA460::open_serial()
 	// no NL to CR translation, don't mark parity errors or breaks
 	// no input parity check, don't strip high bit off,
 	// no XON/XOFF software flow control
-	//
 	uart_config.c_iflag &= ~(IGNBRK | BRKINT | ICRNL |  INLCR | IGNCR | PARMRK | INPCK | ISTRIP | IXON | IXOFF);
 
 	uart_config.c_iflag |= IGNPAR;
@@ -339,7 +345,7 @@ int PGA460::open_serial()
 
 	uart_config.c_cc[VTIME] = 0;
 
-	unsigned speed = 115200;
+	speed_t speed = 115200;
 
 	// Set the baud rate.
 	if ((termios_state = cfsetispeed(&uart_config, speed)) < 0) {
@@ -467,12 +473,6 @@ void PGA460::print_diagnostics(const uint8_t diagnostic_byte)
 	}
 }
 
-int PGA460::print_status()
-{
-	PX4_INFO("Distance: %2.2f", (double)_previous_valid_report_distance);
-	return PX4_OK;
-}
-
 int PGA460::print_usage(const char *reason)
 {
 	if (reason) {
@@ -493,8 +493,9 @@ to be invalid or unstable.
 )DESCR_STR");
 
 	PRINT_MODULE_USAGE_NAME("pga460", "driver");
-	PRINT_MODULE_USAGE_COMMAND("start <device_path>");
-	PRINT_MODULE_USAGE_ARG("device_path", "The pga460 sensor device path, (e.g: /dev/ttyS6", true);
+	PRINT_MODULE_USAGE_SUBCATEGORY("distance_sensor");
+	PRINT_MODULE_USAGE_COMMAND("start");
+	PRINT_MODULE_USAGE_ARG("device_path", "The pga460 sensor device path, (e.g: /dev/ttyS6)", true);
 	PRINT_MODULE_USAGE_COMMAND("status");
 	PRINT_MODULE_USAGE_COMMAND("stop");
 	PRINT_MODULE_USAGE_COMMAND("help");
@@ -771,6 +772,7 @@ void PGA460::uORB_publish_results(const float object_distance)
 {
 	struct distance_sensor_s report = {};
 	report.timestamp = hrt_absolute_time();
+	report.device_id = _device_id.devid;
 	report.type = distance_sensor_s::MAV_DISTANCE_SENSOR_ULTRASOUND;
 	report.orientation = distance_sensor_s::ROTATION_DOWNWARD_FACING;
 	report.current_distance = object_distance;
@@ -899,7 +901,7 @@ int PGA460::write_register(const uint8_t reg, const uint8_t val)
 	}
 }
 
-int pga460_main(int argc, char *argv[])
+extern "C" __EXPORT int pga460_main(int argc, char *argv[])
 {
 	return PGA460::main(argc, argv);
 }

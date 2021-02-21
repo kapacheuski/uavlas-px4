@@ -33,7 +33,7 @@
 
 #include "IridiumSBD.h"
 
-#include <px4_tasks.h>
+#include <px4_platform_common/tasks.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -213,7 +213,7 @@ int IridiumSBD::ioctl(struct file *filp, int cmd, unsigned long arg)
 // private functions                                                 //
 ///////////////////////////////////////////////////////////////////////
 
-void IridiumSBD::main_loop_helper(int argc, char *argv[])
+int IridiumSBD::main_loop_helper(int argc, char *argv[])
 {
 	// start the main loop and stay in it
 	IridiumSBD::instance->main_loop(argc, argv);
@@ -225,6 +225,7 @@ void IridiumSBD::main_loop_helper(int argc, char *argv[])
 	IridiumSBD::instance = nullptr;
 
 	PX4_WARN("stopped");
+	return 0;
 }
 
 void IridiumSBD::main_loop(int argc, char *argv[])
@@ -357,8 +358,6 @@ void IridiumSBD::main_loop(int argc, char *argv[])
 			test_loop();
 			break;
 		}
-
-		publish_subsystem_status();
 
 		if (_new_state != _state) {
 			VERBOSE_INFO("SWITCHING STATE FROM %s TO %s", satcom_state_string[_state], satcom_state_string[_new_state]);
@@ -1111,46 +1110,17 @@ void IridiumSBD::publish_iridium_status()
 
 	// publish the status if it changed
 	if (need_to_publish) {
-		if (_iridiumsbd_status_pub == nullptr) {
-			_iridiumsbd_status_pub = orb_advertise(ORB_ID(iridiumsbd_status), &_status);
-
-		} else {
-			orb_publish(ORB_ID(iridiumsbd_status), _iridiumsbd_status_pub, &_status);
-		}
-	}
-
-}
-
-void IridiumSBD::publish_subsystem_status()
-{
-	const bool present = true;
-	const bool enabled = true;
-	const bool ok = _status.last_heartbeat > 0; // maybe at some point here an additional check should be made
-
-	if ((_info.present != present) || (_info.enabled != enabled) || (_info.ok != ok)) {
-		_info.timestamp = hrt_absolute_time();
-		_info.subsystem_type = subsystem_info_s::SUBSYSTEM_TYPE_SATCOM;
-		_info.present = present;
-		_info.enabled = enabled;
-		_info.ok = ok;
-
-		if (_subsystem_pub == nullptr) {
-			_subsystem_pub = orb_advertise_queue(ORB_ID(subsystem_info), &_info, subsystem_info_s::ORB_QUEUE_LENGTH);
-
-		} else {
-			orb_publish(ORB_ID(subsystem_info), _subsystem_pub, &_info);
-		}
+		_iridiumsbd_status_pub.publish(_status);
 	}
 }
 
-
-int	IridiumSBD::open_first(struct file *filep)
+int IridiumSBD::open_first(struct file *filep)
 {
 	_cdev_used = true;
 	return CDev::open_first(filep);
 }
 
-int	IridiumSBD::close_last(struct file *filep)
+int IridiumSBD::close_last(struct file *filep)
 {
 	_cdev_used = false;
 	return CDev::close_last(filep);

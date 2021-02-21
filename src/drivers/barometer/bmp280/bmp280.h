@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (C) 2012-2016 PX4 Development Team. All rights reserved.
+ *   Copyright (C) 2016-2019 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,6 +37,9 @@
  * Shared defines for the bmp280 driver.
  */
 #pragma once
+
+#include <drivers/device/spi.h>
+#include <inttypes.h>
 
 #define BMP280_ADDR_CAL		0x88	/* address of 12x 2 bytes calibration data */
 #define BMP280_ADDR_DATA	0xF7	/* address of 2x 3 bytes p-t data */
@@ -133,7 +136,6 @@ class IBMP280
 public:
 	virtual ~IBMP280() = default;
 
-	virtual bool is_external() = 0;
 	virtual int init() = 0;
 
 	// read reg value
@@ -150,12 +152,12 @@ public:
 
 	virtual uint32_t get_device_id() const = 0;
 
+	virtual uint8_t get_device_address() const = 0;
 };
 
 } /* namespace */
 
 
 /* interface factories */
-extern bmp280::IBMP280 *bmp280_spi_interface(uint8_t busnum, uint32_t device, bool external);
-extern bmp280::IBMP280 *bmp280_i2c_interface(uint8_t busnum, uint32_t device, bool external);
-typedef bmp280::IBMP280 *(*BMP280_constructor)(uint8_t, uint32_t, bool);
+extern bmp280::IBMP280 *bmp280_spi_interface(uint8_t busnum, uint32_t device, int bus_frequency, spi_mode_e spi_mode);
+extern bmp280::IBMP280 *bmp280_i2c_interface(uint8_t busnum, uint32_t device, int bus_frequency);
