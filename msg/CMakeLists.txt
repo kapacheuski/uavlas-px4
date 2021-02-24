@@ -136,6 +136,7 @@ set(msg_files
 	tune_control.msg
 	uavcan_parameter_request.msg
 	uavcan_parameter_value.msg
+	uavlas_report.msg
 	ulog_stream.msg
 	ulog_stream_ack.msg
 	vehicle_acceleration.msg

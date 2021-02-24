@@ -103,6 +103,8 @@ void LoggedTopics::add_default_topics()
 	add_topic("vtol_vehicle_status", 200);
 	add_topic("yaw_estimator_status", 200);
 
+	// UAVLAS Topic
+	add_topic("uavlas_report",100);
 	// multi topics
 	add_topic_multi("actuator_outputs", 100);
 	add_topic_multi("logger_status");
