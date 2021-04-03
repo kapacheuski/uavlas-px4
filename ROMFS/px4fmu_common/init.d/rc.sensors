@@ -133,7 +133,12 @@ then
 		fi
 	fi
 fi
-
+# UAVLAS landing sensor
+if param greater -s ULS_ENABLED 0
+then
+	sleep 2 #wait for sensor to start
+	uavlas start -X
+fi
 ###############################################################################
 #                            End Optional drivers                             #
 ###############################################################################

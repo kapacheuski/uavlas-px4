@@ -21,6 +21,9 @@ float32 gimu_yaw   # orientation of ground unit - yaw (compass) (deg)
 
 float32 bro_yaw	#boady relative orientation in MultiRX mode (deg)
 
+float32	  rx_x	#  Receiver location on vehicle frame X position cm
+float32	  rx_y	#  Receiver location on vehicle frame Y position cm
+
 float32 sq    # signal quality
 float32 ss    # common lighting level (db)
 float32 sl    # signal level (%)
