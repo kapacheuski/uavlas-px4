@@ -135,17 +135,18 @@ void UAVLAS::updateNavigation()
 	matrix::Vector3f vel(orb_report.vel_x, orb_report.vel_y, orb_report.vel_z);
 
 	//3 - Check MultiRX orientation -> if valid use to rotate offset. if not try use compass.
-	if (!(orb_report.status & ULS_STATUS_MASK_MRX_OK)) {
+	if (orb_report.status & ULS_STATUS_MASK_MRX_OK) {
 		// pos and vel rotete with orb_report.bro_yaw
-			matrix::Quaternion<float> q_att(&_vehicleAttitude.q[0]);
-			matrix::Euler<float>  euler(orb_report.gimu_yaw,0,0);
-			matrix::Dcmf r_rel = matrix::Dcm<float>(q_att);
-			matrix::Dcmf r_abs = matrix::Dcm<float>(euler);
+		// 8
+		// matrix::Quaternion<float> q_att(&_vehicleAttitude.q[0]);
+		// matrix::Euler<float>  euler(orb_report.gimu_yaw, 0, 0);
+		// matrix::Dcmf r_rel = matrix::Dcm<float>(q_att);
+		// matrix::Dcmf r_abs = matrix::Dcm<float>(euler);
 
-			pos = r_abs * pos;
-			vel = r_abs * vel;
-			pos = r_rel * pos;
-			vel = r_rel * vel;
+		// pos = r_abs * pos;
+		// vel = r_abs * vel;
+		// pos = r_rel * pos;
+		// vel = r_rel * vel;
 
 		if (!(orb_report.status & ULS_STATUS_MASK_GU_IMU_OK)) {
 			// Calculate compass deviation to use in future
@@ -155,10 +156,9 @@ void UAVLAS::updateNavigation()
 		}
 	} else {
 		//4 - Check Compass -> if valid rotate offset. if not skip target pos.
-		if (!(orb_report.status & ULS_STATUS_MASK_GU_IMU_OK)) {
+		if (orb_report.status & ULS_STATUS_MASK_GU_IMU_OK) {
 			// pos and vel rotate with orb_report.gimu[2] - with deviation applyed (if has)
-			matrix::Euler<float>  euler(math::radians(-orb_report.gimu_yaw),0,0);
-			matrix::Dcmf r_abs = matrix::Dcm<float>(euler);
+			matrix::Dcmf r_abs = matrix::Dcmf(matrix::Eulerf{0, 0, math::radians((float) - orb_report.gimu_yaw)});
 
 			pos = r_abs * pos;
 			vel = r_abs * vel;
@@ -171,7 +171,7 @@ void UAVLAS::updateNavigation()
 	// 6- apply information to landing position
 
 	_target_pose.timestamp = orb_report.timestamp;
-	_target_pose.is_static =_uls_mode.get();
+	_target_pose.is_static = _uls_mode.get();
 
 	_target_pose.rel_pos_valid = true;
 	_target_pose.rel_vel_valid = true;
@@ -190,7 +190,7 @@ void UAVLAS::updateNavigation()
 	if (_vehicleLocalPosition.xy_valid) {
 		_target_pose.x_abs = pos(0) + _vehicleLocalPosition.x;
 		_target_pose.y_abs = pos(1) + _vehicleLocalPosition.y;
-		_target_pose.z_abs = pos(2)+ _vehicleLocalPosition.z;
+		_target_pose.z_abs = pos(2) + _vehicleLocalPosition.z;
 		_target_pose.abs_pos_valid = true;
 
 	} else {
@@ -200,13 +200,13 @@ void UAVLAS::updateNavigation()
 	_targetPosePub.publish(_target_pose);
 
 	//6 - Provide AGL - set AGL of the system if configured
-	if(_uls_provide_agl.get() != 0) {
+	if (_uls_provide_agl.get() != 0) {
 		distance_sensor_s distance_report{};
 		distance_report.timestamp = orb_report.timestamp;
 		distance_report.min_distance = 0.1;
 		distance_report.max_distance = 20.0;
 		distance_report.current_distance = orb_report.pos_z;
-		distance_report.variance = orb_report.pos_z/10.f;
+		distance_report.variance = orb_report.pos_z / 10.f;
 		distance_report.signal_quality = 100;
 		distance_report.type = distance_sensor_s::MAV_DISTANCE_SENSOR_INFRARED;
 		/* TODO: the ID needs to be properly set */
@@ -234,7 +234,7 @@ int UAVLAS::read_device_block(struct uavlas_report_s *block)
 	__cpx_uls_data_packet packet;
 	memset(&packet, 0, sizeof packet);
 	uint8_t reg = UAVLAS_I2C_DATA_ADDR;
-	int status = transfer(&reg, 1, (uint8_t*)&packet, sizeof packet);
+	int status = transfer(&reg, 1, (uint8_t *)&packet, sizeof packet);
 
 	if (status != OK) {
 		_read_failures++;
@@ -242,7 +242,7 @@ int UAVLAS::read_device_block(struct uavlas_report_s *block)
 	}
 
 	uint16_t tcrc = 0;
-	uint8_t *pxPack = (uint8_t*)&packet;
+	uint8_t *pxPack = (uint8_t *)&packet;
 
 	for (uint i = 0; i < sizeof(packet) - 2; i++) {
 		tcrc += *pxPack++;
