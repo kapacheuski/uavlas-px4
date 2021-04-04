@@ -133,6 +133,9 @@ void UAVLAS::updateNavigation()
 
 	matrix::Vector3f pos(orb_report.pos_x, orb_report.pos_y, orb_report.pos_z);
 	matrix::Vector3f vel(orb_report.vel_x, orb_report.vel_y, orb_report.vel_z);
+	matrix::Vector3f offset(orb_report.rx_x, orb_report.rx_y, 0);
+	matrix::Quaternion<float> q_att(&_vehicleAttitude.q[0]);
+	matrix::Dcmf r_att = matrix::Dcmf(q_att);
 
 	//3 - Check MultiRX orientation -> if valid use to rotate offset. if not try use compass.
 	if (orb_report.status & ULS_STATUS_MASK_MRX_OK) {
@@ -148,7 +151,10 @@ void UAVLAS::updateNavigation()
 		// pos = r_rel * pos;
 		// vel = r_rel * vel;
 
-		if (!(orb_report.status & ULS_STATUS_MASK_GU_IMU_OK)) {
+		_target_pose.rel_pos_valid = true;
+		_target_pose.rel_vel_valid = true;
+
+		if (orb_report.status & ULS_STATUS_MASK_GU_IMU_OK) {
 			// Calculate compass deviation to use in future
 
 		} else {
@@ -159,22 +165,29 @@ void UAVLAS::updateNavigation()
 		if (orb_report.status & ULS_STATUS_MASK_GU_IMU_OK) {
 			// pos and vel rotate with orb_report.gimu[2] - with deviation applyed (if has)
 			matrix::Dcmf r_abs = matrix::Dcmf(matrix::Eulerf{0, 0, math::radians((float) - orb_report.gimu_yaw)});
-
 			pos = r_abs * pos;
 			vel = r_abs * vel;
+			// Apply sensor offset correction
+			offset = r_att * offset;
+			offset(1) = -offset(1); // Inverse rotation
+			pos = pos + offset;
+
+			_target_pose.rel_pos_valid = true;
+			_target_pose.rel_vel_valid = true;
+
 		} else {
 			// No rotation provided unable to calculate new position.
 			return;
 		}
 	}
 
+	if(!_target_pose.rel_pos_valid)return; // No valid position found
+
 	// 6- apply information to landing position
 
 	_target_pose.timestamp = orb_report.timestamp;
 	_target_pose.is_static = _uls_mode.get();
 
-	_target_pose.rel_pos_valid = true;
-	_target_pose.rel_vel_valid = true;
 	_target_pose.x_rel = pos(0);
 	_target_pose.y_rel = pos(1);
 	_target_pose.z_rel = pos(2);
@@ -255,21 +268,21 @@ int UAVLAS::read_device_block(struct uavlas_report_s *block)
 
 	block->id = packet.guid;
 	block->status = packet.status;
-	block->pos_x = packet.pos[0] / 100.f;
-	block->pos_y = packet.pos[1] / 100.f;
-	block->pos_z = packet.pos[2] / 100.f;
-	block->vel_x = packet.vel[0] / 100.f;
-	block->vel_y = packet.vel[1] / 100.f;
-	block->vel_z = packet.vel[2] / 100.f;
-	block->gimu_roll = packet.gimu[0] / 10.f;
-	block->gimu_pitch = packet.gimu[1] / 10.f;
-	block->gimu_yaw = packet.gimu[2] / 10.f;
-	block->bro_yaw = packet.bro_yaw / 10.f;
-	block->rx_x = packet.rx_xy[0] / 10.f;
-	block->rx_y = packet.rx_xy[1] / 10.f;
-	block->sq   = ((float32)packet.sq);
-	block->ss   = packet.ss;
-	block->sl   = ((float32)packet.sl);
+	block->pos_x = (float)packet.pos[0] / 100.f;
+	block->pos_y = (float)packet.pos[1] / 100.f;
+	block->pos_z = (float)packet.pos[2] / 100.f;
+	block->vel_x = (float)packet.vel[0] / 100.f;
+	block->vel_y = (float)packet.vel[1] / 100.f;
+	block->vel_z = (float)packet.vel[2] / 100.f;
+	block->gimu_roll = (float)packet.gimu[0] / 10.f;
+	block->gimu_pitch = (float)packet.gimu[1] / 10.f;
+	block->gimu_yaw = (float)packet.gimu[2] / 10.f;
+	block->bro_yaw = (float)packet.bro_yaw / 10.f;
+	block->rx_x = (float)packet.rx_xy[0] / 10.f;
+	block->rx_y = (float)packet.rx_xy[1] / 10.f;
+	block->sq   = (float)packet.sq;
+	block->ss   = (float)packet.ss;
+	block->sl   = (float)packet.sl;
 
 	return status;
 }
