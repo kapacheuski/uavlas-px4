@@ -16,17 +16,31 @@
 PARAM_DEFINE_INT32(ULS_ENABLED, 1);
 
 /**
- * UAVLAS landing system mode
+ * UAVLAS landing system platform mode
  *
- * This parameter allows to set mode of operation.
+ * This parameter allows to set landig on moved platform or stationary.
  *
  * @value 0 Moved platform
  * @value 1 Fixed platform
  * @group UAVLAS
  */
 
-PARAM_DEFINE_INT32(ULS_MODE, 0);
+PARAM_DEFINE_INT32(ULS_PFM_MODE, 0);
 
+/**
+ * UAVLAS landing orientation mode
+ *
+ * This parameter allows to set mode of operation.
+ * Use "GU IMU only" if you have only 1 receiver on board - no MRX
+ * Use "MRX Body YAW" only if you have 2 or more receivers and ground unit compass unstable.
+ *
+ * @value 0 Any sensor
+ * @value 1 GU IMU only
+ * @value 2 MRX Body YAW only
+ * @group UAVLAS
+ */
+
+PARAM_DEFINE_INT32(ULS_ORIENT_MODE, 0);
 
 /**
  * UAVLAS landing system altitude data.
@@ -41,9 +55,10 @@ PARAM_DEFINE_INT32(ULS_MODE, 0);
 PARAM_DEFINE_INT32(ULS_PROVIDE_AGL, 0);
 
 /**
- * UAVLAS  drop altitude.
+ * UAVLAS  Force landing detection to drop vehicle/
  *
- * This parameter allows to decrease and cut throttle on landing stage ( 0-disabled )
+ * This parameter allows to force land dedection evet at pecific altitude (0-disable).
+ * It is useful in conditions when landing detect may fail (landing for muving objects).
  *
  * @unit m
  * @min 0.0

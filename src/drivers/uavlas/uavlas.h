@@ -50,14 +50,16 @@
 #include <uORB/Publication.hpp>
 #include <uORB/Subscription.hpp>
 
-#include <uORB/topics/uavlas_report.h>
 #include <uORB/topics/landing_target_pose.h>
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_local_position.h>
+#include <uORB/topics/vehicle_land_detected.h>
+#include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/distance_sensor.h>
+#include <uORB/topics/parameter_update.h>
+#include <uORB/topics/uavlas_report.h>
 
 #include <px4_platform_common/module_params.h>
-#include <uORB/topics/parameter_update.h>
 
 #define UAVLAS_I2C_ADDRESS	  0x55
 #define UAVLAS_I2C_HMI_ADDR	  0x80 // Who am i register
@@ -73,6 +75,8 @@
 #define ULS_STATUS_MASK_GU_IMU_OK  (1<<4)
 #define ULS_STATUS_MASK_MRX_OK     (1<<5)
 #define ULS_STATUS_MASK_MRXYAW_OK  (1<<6)
+
+#define ULS_SETTING_DROP_ARM  (10)
 
 namespace uavlas
 {
@@ -110,7 +114,8 @@ public:
 	void parameters_update(int parameter_update_sub, bool force = false);
 	DEFINE_PARAMETERS(
 		(ParamInt<px4::params::ULS_ENABLED>) _uls_enabled,
-		(ParamInt<px4::params::ULS_MODE>) _uls_mode,
+		(ParamInt<px4::params::ULS_PFM_MODE>) _uls_pmode,
+		(ParamInt<px4::params::ULS_ORIENT_MODE>) _uls_omode,
 		(ParamInt<px4::params::ULS_PROVIDE_AGL>) _uls_provide_agl,
 		(ParamFloat<px4::params::ULS_DROP_ALT>) _uls_drop_alt
 	)
@@ -130,16 +135,28 @@ private:
 
 	uORB::Subscription _attitudeSub{ORB_ID(vehicle_attitude)};
 	vehicle_attitude_s _vehicleAttitude{};
+	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
+
 
 	uORB::Subscription _parameterSub{ORB_ID(parameter_update)};
 
+
 	uORB::Publication<landing_target_pose_s> _targetPosePub{ORB_ID(landing_target_pose)};
 	landing_target_pose_s _target_pose{};
-
-
+	uORB::Publication<vehicle_land_detected_s> _vehicle_land_detected_pub{ORB_ID(vehicle_land_detected)};
+	vehicle_land_detected_s _land_detected = {
+		.timestamp = 0,
+		.alt_max = -1.0f,
+		.freefall = false,
+		.ground_contact = true,
+		.maybe_landed = true,
+		.landed = true,
+	};
 	bool _isSensorConnected;
 	bool _vehicleLocalPosition_valid{false};
 	bool _vehicleAttitude_valid{false};
+	uint8_t _nav_state{0};
+	int _drop_arming;
 	int _read_failures;
 	int _crc_failures;
 

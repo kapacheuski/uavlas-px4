@@ -125,68 +125,62 @@ void UAVLAS::updateNavigation()
 		return ;
 	}
 
-	//1 - Check signal received - if not -> exit
+	//Check signal received - if not -> exit
 	if (!(orb_report.status & ULS_STATUS_MASK_CARRIER_OK)) { return; }
 
 	//2 - Check Offset calculated (distance valid) -> if not ->exit
-	if (!(orb_report.status & ULS_STATUS_MASK_POS_OK)) { return; }
+	if (!(orb_report.status & ULS_STATUS_MASK_POS_OK)) {
+		_drop_arming = 0;
+		return;
+	}
 
-	matrix::Vector3f pos(orb_report.pos_x, orb_report.pos_y, orb_report.pos_z);
-	matrix::Vector3f vel(orb_report.vel_x, orb_report.vel_y, orb_report.vel_z);
-	matrix::Vector3f offset(orb_report.rx_x, orb_report.rx_y, 0);
-	matrix::Quaternion<float> q_att(&_vehicleAttitude.q[0]);
-	matrix::Dcmf r_att = matrix::Dcmf(q_att);
+	if (_drop_arming < ULS_SETTING_DROP_ARM) { _drop_arming++; }
 
-	//3 - Check MultiRX orientation -> if valid use to rotate offset. if not try use compass.
-	if (orb_report.status & ULS_STATUS_MASK_MRX_OK) {
-		// pos and vel rotete with orb_report.bro_yaw
-		// 8
-		// matrix::Quaternion<float> q_att(&_vehicleAttitude.q[0]);
-		// matrix::Euler<float>  euler(orb_report.gimu_yaw, 0, 0);
-		// matrix::Dcmf r_rel = matrix::Dcm<float>(q_att);
-		// matrix::Dcmf r_abs = matrix::Dcm<float>(euler);
+	matrix::Vector3f pos(orb_report.pos_y, orb_report.pos_x, -orb_report.pos_z);
+	matrix::Vector3f vel(orb_report.vel_y, orb_report.vel_x, -orb_report.vel_z);
+	matrix::Vector3f offset(orb_report.rx_x, orb_report.rx_y, 0.f);
+	matrix::Dcmf r_hdg = matrix::Dcmf(matrix::Eulerf{0, 0, _vehicleLocalPosition.heading});
 
-		// pos = r_abs * pos;
-		// vel = r_abs * vel;
-		// pos = r_rel * pos;
-		// vel = r_rel * vel;
-
-		_target_pose.rel_pos_valid = true;
-		_target_pose.rel_vel_valid = true;
+	//Check MultiRX orientation -> if valid use to rotate offset. if not try use compass.
+	if ((orb_report.status & ULS_STATUS_MASK_MRXYAW_OK) &&
+	    ((_uls_omode.get() == 0) || (_uls_omode.get() == 2))) {
+		matrix::Dcmf r_rel = matrix::Dcmf(matrix::Eulerf{0, 0, math::radians((float) - orb_report.bro_yaw)});
+		// Get relative position in body frame (FRD) coordinates
+		pos = -(r_rel * pos);
+		vel = -(r_rel * vel);
+		//Get NED target position.
+		pos = r_hdg * pos;
+		vel = r_hdg * vel;
 
 		if (orb_report.status & ULS_STATUS_MASK_GU_IMU_OK) {
-			// Calculate compass deviation to use in future
-
+			// TODO: Calculate compass deviation to use in future
 		} else {
 			// reset deviation value
 		}
-	} else {
-		//4 - Check Compass -> if valid rotate offset. if not skip target pos.
-		if (orb_report.status & ULS_STATUS_MASK_GU_IMU_OK) {
-			// pos and vel rotate with orb_report.gimu[2] - with deviation applyed (if has)
-			matrix::Dcmf r_abs = matrix::Dcmf(matrix::Eulerf{0, 0, math::radians((float) - orb_report.gimu_yaw)});
+	} else {//Check Compass -> if valid rotate offset. if not - skip target pos.
+		if ((orb_report.status & ULS_STATUS_MASK_GU_IMU_OK) &&
+		    ((_uls_omode.get() == 0) || (_uls_omode.get() == 1))) {
+			// TODO: add compass deviation information
+			matrix::Dcmf r_abs = matrix::Dcmf(matrix::Eulerf{0, 0, math::radians((float) orb_report.gimu_yaw)});
+			// Translate ground unit coordinate system to NED
 			pos = r_abs * pos;
 			vel = r_abs * vel;
-			// Apply sensor offset correction
-			offset = r_att * offset;
-			offset(1) = -offset(1); // Inverse rotation
-			pos = pos + offset;
-
-			_target_pose.rel_pos_valid = true;
-			_target_pose.rel_vel_valid = true;
-
+			// Translate coordinates from ground related to vehicle related
+			pos = -pos;
+			vel = -vel;
 		} else {
 			// No rotation provided unable to calculate new position.
 			return;
 		}
 	}
 
-	if(!_target_pose.rel_pos_valid)return; // No valid position found
+	// Apply sensor offset correction
+	offset = r_hdg * offset; // Make correction in NED
+	pos = pos + offset;
 
-	// 6- apply information to landing position
-
+	// Apply information to landing position
 	_target_pose.timestamp = orb_report.timestamp;
-	_target_pose.is_static = _uls_mode.get();
+	_target_pose.is_static = _uls_pmode.get();
 
 	_target_pose.x_rel = pos(0);
 	_target_pose.y_rel = pos(1);
@@ -200,6 +194,9 @@ void UAVLAS::updateNavigation()
 	_target_pose.cov_vx_rel = orb_report.pos_z / 20.0f; // Cov approximation
 	_target_pose.cov_vy_rel = orb_report.pos_z / 20.0f; // Cov approximation
 
+	_target_pose.rel_pos_valid = true;
+	_target_pose.rel_vel_valid = true;
+
 	if (_vehicleLocalPosition.xy_valid) {
 		_target_pose.x_abs = pos(0) + _vehicleLocalPosition.x;
 		_target_pose.y_abs = pos(1) + _vehicleLocalPosition.y;
@@ -212,7 +209,7 @@ void UAVLAS::updateNavigation()
 
 	_targetPosePub.publish(_target_pose);
 
-	//6 - Provide AGL - set AGL of the system if configured
+	//Provide AGL - set AGL of the system if configured.
 	if (_uls_provide_agl.get() != 0) {
 		distance_sensor_s distance_report{};
 		distance_report.timestamp = orb_report.timestamp;
@@ -227,6 +224,20 @@ void UAVLAS::updateNavigation()
 		distance_report.orientation = ROTATION_PITCH_270;
 
 		_distance_sensor_topic.publish(distance_report);
+	}
+
+	if ((_uls_drop_alt.get() > _target_pose.z_rel) &&
+	    (_drop_arming == ULS_SETTING_DROP_ARM) &&
+	    (_nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_PRECLAND)) {
+		// Drop quad
+		_land_detected.landed = true;
+		_land_detected.freefall = false;
+		_land_detected.maybe_landed = true;
+		_land_detected.ground_contact = true;
+		_land_detected.alt_max = _target_pose.z_rel;
+		_land_detected.in_ground_effect = false;
+		_land_detected.timestamp = hrt_absolute_time();
+		_vehicle_land_detected_pub.publish(_land_detected);
 	}
 
 	//7 - start Thr Drop if configured
@@ -278,8 +289,8 @@ int UAVLAS::read_device_block(struct uavlas_report_s *block)
 	block->gimu_pitch = (float)packet.gimu[1] / 10.f;
 	block->gimu_yaw = (float)packet.gimu[2] / 10.f;
 	block->bro_yaw = (float)packet.bro_yaw / 10.f;
-	block->rx_x = (float)packet.rx_xy[0] / 10.f;
-	block->rx_y = (float)packet.rx_xy[1] / 10.f;
+	block->rx_x = (float)packet.rx_xy[0] / 100.f;
+	block->rx_y = (float)packet.rx_xy[1] / 100.f;
 	block->sq   = (float)packet.sq;
 	block->ss   = (float)packet.ss;
 	block->sl   = (float)packet.sl;
@@ -336,6 +347,13 @@ void UAVLAS::update_topics()
 {
 	_vehicleLocalPosition_valid = _vehicleLocalPositionSub.update(&_vehicleLocalPosition);
 	_vehicleAttitude_valid = _attitudeSub.update(&_vehicleAttitude);
+
+	if (_vehicle_status_sub.updated()) {
+		vehicle_status_s vehicle_status{};
+		_vehicle_status_sub.copy(&vehicle_status);
+		_nav_state = vehicle_status.nav_state;
+	}
+
 
 }
 
