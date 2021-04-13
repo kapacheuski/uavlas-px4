@@ -105,6 +105,7 @@ void LoggedTopics::add_default_topics()
 
 	// UAVLAS Topic
 	add_topic("uavlas_report",100);
+	add_topic("landing_target_pose",100);
 	// multi topics
 	add_topic_multi("actuator_outputs", 100);
 	add_topic_multi("logger_status");
