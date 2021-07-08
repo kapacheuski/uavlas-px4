@@ -136,43 +136,53 @@ void UAVLAS::updateNavigation()
 
 	if (_drop_arming < ULS_SETTING_DROP_ARM) { _drop_arming++; }
 
-	matrix::Vector3f pos(orb_report.pos_y, orb_report.pos_x, -orb_report.pos_z);
-	matrix::Vector3f vel(orb_report.vel_y, orb_report.vel_x, -orb_report.vel_z);
+	matrix::Vector3f pos;
+	matrix::Vector3f vel;
 	matrix::Vector3f offset(orb_report.rx_x, orb_report.rx_y, 0.f);
 	matrix::Dcmf r_hdg = matrix::Dcmf(matrix::Eulerf{0, 0, _vehicleLocalPosition.heading});
 
-	//Check MultiRX orientation -> if valid use to rotate offset. if not try use compass.
-	if ((orb_report.status & ULS_STATUS_MASK_MRXYAW_OK) &&
-	    ((_uls_omode.get() == 0) || (_uls_omode.get() == 2))) {
-		matrix::Dcmf r_rel = matrix::Dcmf(matrix::Eulerf{0, 0, math::radians((float) - orb_report.bro_yaw)});
-		// Get relative position in body frame (FRD) coordinates
-		pos = -(r_rel * pos);
-		vel = -(r_rel * vel);
-		//Get NED target position.
-		pos = r_hdg * pos;
-		vel = r_hdg * vel;
+	// Compass mode accept NED coordinates
+	if ((orb_report.status & ULS_STATUS_MASK_NED_OK) &&
+	    ((_uls_omode.get() == 0) || (_uls_omode.get() == 1))) {
+	    	pos = {orb_report.pos_ned_n, orb_report.pos_ned_e, orb_report.pos_ned_d};
+		vel = {orb_report.vel_ned_n,orb_report.vel_ned_e,orb_report.vel_ned_d};
 
-		if (orb_report.status & ULS_STATUS_MASK_GU_IMU_OK) {
-			// TODO: Calculate compass deviation to use in future
-		} else {
-			// reset deviation value
-		}
-	} else {//Check Compass -> if valid rotate offset. if not - skip target pos.
-		if ((orb_report.status & ULS_STATUS_MASK_GU_IMU_OK) &&
-		    ((_uls_omode.get() == 0) || (_uls_omode.get() == 1))) {
-			// TODO: add compass deviation information
-			matrix::Dcmf r_abs = matrix::Dcmf(matrix::Eulerf{0, 0, math::radians((float) orb_report.gimu_yaw)});
-			// Translate ground unit coordinate system to NED
-			pos = r_abs * pos;
-			vel = r_abs * vel;
-			// Translate coordinates from ground related to vehicle related
-			pos = -pos;
-			vel = -vel;
-		} else {
-			// No rotation provided unable to calculate new position.
-			return;
-		}
-	}
+	    }else{
+		    return;
+	    }
+
+	// //Check MultiRX orientation -> if valid use to rotate offset. if not try use compass.
+	// if ((orb_report.status & ULS_STATUS_MASK_MRXYAW_OK) &&
+	//     ((_uls_omode.get() == 0) || (_uls_omode.get() == 2))) {
+	// 	matrix::Dcmf r_rel = matrix::Dcmf(matrix::Eulerf{0, 0, math::radians((float) - orb_report.bro_yaw)});
+	// 	// Get relative position in body frame (FRD) coordinates
+	// 	pos = -(r_rel * pos);
+	// 	vel = -(r_rel * vel);
+	// 	//Get NED target position.
+	// 	pos = r_hdg * pos;
+	// 	vel = r_hdg * vel;
+
+	// 	if (orb_report.status & ULS_STATUS_MASK_GU_IMU_OK) {
+	// 		// TODO: Calculate compass deviation to use in future
+	// 	} else {
+	// 		// reset deviation value
+	// 	}
+	// } else {//Check Compass -> if valid rotate offset. if not - skip target pos.
+	// 	if ((orb_report.status & ULS_STATUS_MASK_GU_IMU_OK) &&
+	// 	    ((_uls_omode.get() == 0) || (_uls_omode.get() == 1))) {
+	// 		// TODO: add compass deviation information
+	// 		matrix::Dcmf r_abs = matrix::Dcmf(matrix::Eulerf{0, 0, math::radians((float) orb_report.gimu_yaw)});
+	// 		// Translate ground unit coordinate system to NED
+	// 		pos = r_abs * pos;
+	// 		vel = r_abs * vel;
+	// 		// Translate coordinates from ground related to vehicle related
+	// 		pos = -pos;
+	// 		vel = -vel;
+	// 	} else {
+	// 		// No rotation provided unable to calculate new position.
+	// 		return;
+	// 	}
+	// }
 
 	// Apply sensor offset correction
 	offset = r_hdg * offset; // Make correction in NED
@@ -210,35 +220,35 @@ void UAVLAS::updateNavigation()
 	_targetPosePub.publish(_target_pose);
 
 	//Provide AGL - set AGL of the system if configured.
-	if (_uls_provide_agl.get() != 0) {
-		distance_sensor_s distance_report{};
-		distance_report.timestamp = orb_report.timestamp;
-		distance_report.min_distance = 0.1;
-		distance_report.max_distance = 20.0;
-		distance_report.current_distance = orb_report.pos_z;
-		distance_report.variance = orb_report.pos_z / 10.f;
-		distance_report.signal_quality = 100;
-		distance_report.type = distance_sensor_s::MAV_DISTANCE_SENSOR_INFRARED;
-		/* TODO: the ID needs to be properly set */
-		distance_report.id = 0;
-		distance_report.orientation = ROTATION_PITCH_270;
+	// if (_uls_provide_agl.get() != 0) {
+	// 	distance_sensor_s distance_report{};
+	// 	distance_report.timestamp = orb_report.timestamp;
+	// 	distance_report.min_distance = 0.1;
+	// 	distance_report.max_distance = 20.0;
+	// 	distance_report.current_distance = orb_report.pos_z;
+	// 	distance_report.variance = orb_report.pos_z / 10.f;
+	// 	distance_report.signal_quality = 100;
+	// 	distance_report.type = distance_sensor_s::MAV_DISTANCE_SENSOR_INFRARED;
+	// 	/* TODO: the ID needs to be properly set */
+	// 	distance_report.id = 0;
+	// 	distance_report.orientation = ROTATION_PITCH_270;
 
-		_distance_sensor_topic.publish(distance_report);
-	}
+	// 	_distance_sensor_topic.publish(distance_report);
+	// }
 
-	if ((_uls_drop_alt.get() > _target_pose.z_rel) &&
-	    (_drop_arming == ULS_SETTING_DROP_ARM) &&
-	    (_nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_PRECLAND)) {
-		// Drop quad
-		_land_detected.landed = true;
-		_land_detected.freefall = false;
-		_land_detected.maybe_landed = true;
-		_land_detected.ground_contact = true;
-		_land_detected.alt_max = _target_pose.z_rel;
-		_land_detected.in_ground_effect = false;
-		_land_detected.timestamp = hrt_absolute_time();
-		_vehicle_land_detected_pub.publish(_land_detected);
-	}
+	// if ((_uls_drop_alt.get() > _target_pose.z_rel) &&
+	//     (_drop_arming == ULS_SETTING_DROP_ARM) &&
+	//     (_nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_PRECLAND)) {
+	// 	// Drop quad
+	// 	_land_detected.landed = true;
+	// 	_land_detected.freefall = false;
+	// 	_land_detected.maybe_landed = true;
+	// 	_land_detected.ground_contact = true;
+	// 	_land_detected.alt_max = _target_pose.z_rel;
+	// 	_land_detected.in_ground_effect = false;
+	// 	_land_detected.timestamp = hrt_absolute_time();
+	// 	_vehicle_land_detected_pub.publish(_land_detected);
+	// }
 
 	//7 - start Thr Drop if configured
 }
@@ -288,12 +298,37 @@ int UAVLAS::read_device_block(struct uavlas_report_s *block)
 	block->gimu_roll = (float)packet.gimu[0] / 10.f;
 	block->gimu_pitch = (float)packet.gimu[1] / 10.f;
 	block->gimu_yaw = (float)packet.gimu[2] / 10.f;
-	block->bro_yaw = (float)packet.bro_yaw / 10.f;
-	block->rx_x = (float)packet.rx_xy[0] / 100.f;
-	block->rx_y = (float)packet.rx_xy[1] / 100.f;
+	block->mrxyaw = (float)packet.mrxyaw / 10.f;
+	block->rx_x = (float)packet.rxXY[0] / 100.f;
+	block->rx_y = (float)packet.rxXY[1] / 100.f;
 	block->sq   = (float)packet.sq;
 	block->ss   = (float)packet.ss;
 	block->sl   = (float)packet.sl;
+
+	block->pos_ned_n = packet.pos_ned[0];
+	block->pos_ned_e = packet.pos_ned[1];
+	block->pos_ned_d = packet.pos_ned[2];
+
+	block->vel_ned_n = packet.vel_ned[0];
+	block->vel_ned_e = packet.vel_ned[1];
+	block->vel_ned_d = packet.vel_ned[2];
+
+	block->pos_frd_f = packet.pos_frd[0];
+	block->pos_frd_r = packet.pos_frd[1];
+	block->pos_frd_d = packet.pos_frd[2];
+
+	block->vel_frd_f = packet.vel_frd[0];
+	block->vel_frd_r = packet.vel_frd[1];
+	block->vel_frd_d = packet.vel_frd[2];
+
+
+	block->pos_wld_lat = packet.pos_wld[0];
+	block->pos_wld_lon = packet.pos_wld[1];
+	block->pos_wld_msl = packet.pos_wld[2];
+
+	block->vel_wld_n = packet.vel_wld[0];
+	block->vel_wld_e = packet.vel_wld[1];
+	block->vel_wld_d = packet.vel_wld[2];
 
 	return status;
 }

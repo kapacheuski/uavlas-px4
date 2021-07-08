@@ -75,25 +75,36 @@
 #define ULS_STATUS_MASK_GU_IMU_OK  (1<<4)
 #define ULS_STATUS_MASK_MRX_OK     (1<<5)
 #define ULS_STATUS_MASK_MRXYAW_OK  (1<<6)
+#define ULS_STATUS_MASK_NED_OK     (1<<7)
+#define ULS_STATUS_MASK_FRD_OK     (1<<8)
+#define ULS_STATUS_MASK_LLM_OK     (1<<9)
 
 #define ULS_SETTING_DROP_ARM  (10)
 
 namespace uavlas
 {
-typedef struct __attribute__((packed))
-{
-	uint16_t  guid;   // Ground unit ID
-	uint16_t  status; // Status of receiver
-	int16_t   pos[3]; // Relative Position of transmitter in cm
-	int16_t   vel[3]; // Ralative velocity of tranmitter in cm/s
-	int16_t   gimu[3];// Orientation of ground unit in 0.1*deg
-	int16_t   bro_yaw;// Orientation of the transmitter o.1*deg
-	int8_t	  rx_xy[2];// Receiver location on vehicle frame cm
-	uint8_t   sq;     // Signal quality
-	uint8_t   ss;     // Signal saturation
-	uint8_t   sl;     // Signal level
-	uint16_t  crc;    // Contol summ for packet checking
-} __cpx_uls_data_packet;
+
+typedef struct __attribute__((packed)){
+    uint16_t  guid;   // Ground unit ID
+    uint16_t  status; // Status of receiver
+    int16_t   pos[3]; // Relative Position of transmitter [cm]
+    int16_t   vel[3]; // Ralative velocity of tranmitter [cm/s]
+    int16_t   gimu[3];// Orientation of ground unit in [0.1*deg]
+    int16_t   mrxyaw;// Orientation of the transmitter [0.1*deg]
+    int8_t    rxXY[2];// Current receiver mouting position [cm]
+    uint8_t   sq;     // Signal quality  [%]
+    uint8_t   ss;     // Signal saturation [%]
+    uint8_t   sl;     // Signal level [%]
+     // Estimated Position Data
+    float  pos_ned[3]; // Relative Position of transmitter in NED (North East Down)[m]
+    float  vel_ned[3]; // Ralative velocity of tranmitter in NED (North East Down) [m/s]
+    float  pos_frd[3]; // Relative Position of transmitter in FRD (Forward Right Down) [m]
+    float  vel_frd[3]; // Ralative velocity of tranmitter in FRD (Forward Right Down)[m/s]
+    float  pos_wld[3]; // World Position of transmitter  (Lat Lon Msl)[d,d,m]
+    float  vel_wld[3]; // World velocity of tranmitter in NED (North East Down) [m/s]
+    // Control word
+    uint16_t  crc;    // Contol summ for packet checking
+}__cpx_uls_data_packet;
 
 class UAVLAS : public device::I2C, public I2CSPIDriver<UAVLAS>, public ModuleParams
 {
